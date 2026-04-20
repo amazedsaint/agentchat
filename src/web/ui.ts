@@ -363,6 +363,13 @@ export const UI_HTML = `<!doctype html>
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .member-row.you .nick { color: var(--accent); }
+  .member-row .kick-btn {
+    border: 1px solid transparent; background: transparent;
+    color: var(--text-muted); font-size: 12px; padding: 2px 5px;
+    border-radius: 4px; opacity: 0; transition: opacity 100ms;
+  }
+  .member-row:hover .kick-btn { opacity: 1; }
+  .member-row .kick-btn:hover { color: var(--err); border-color: var(--err); }
 
   .pending-card {
     border: 1px solid var(--warn);
@@ -1036,16 +1043,37 @@ export const UI_HTML = `<!doctype html>
   function renderMembers() {
     const box = $('members-list'); box.textContent = '';
     $('members-header').textContent = 'Members · ' + members.length;
+    const room = rooms.find((r) => r.id === activeRoomId);
+    const canKick = !!(room && room.is_creator);
     for (const m of members) {
+      const isMe = me && m.pubkey === me.pubkey;
       const row = document.createElement('div');
-      row.className = 'member-row' + (me && m.pubkey === me.pubkey ? ' you' : '');
+      row.className = 'member-row' + (isMe ? ' you' : '');
       const av = document.createElement('div'); av.className = 'mini-avatar';
       av.textContent = (m.nickname || '?').charAt(0).toUpperCase();
       const nick = document.createElement('span'); nick.className = 'nick';
       nick.textContent = '@' + (m.nickname || m.pubkey.slice(0, 8));
       row.appendChild(av); row.appendChild(nick);
+      if (canKick && !isMe) {
+        const kb = document.createElement('button');
+        kb.type = 'button'; kb.className = 'kick-btn'; kb.textContent = 'kick';
+        kb.title = 'Remove @' + (m.nickname || m.pubkey.slice(0, 8)) + ' and rotate the room key';
+        kb.addEventListener('click', () => handleKick(m.pubkey, m.nickname));
+        row.appendChild(kb);
+      }
       box.appendChild(row);
     }
+  }
+
+  async function handleKick(pubkey, nickname) {
+    if (!confirm('Kick @' + (nickname || pubkey.slice(0, 8)) + '? The room key will rotate so they lose access to future messages.')) return;
+    try {
+      await api('/api/rooms/' + activeRoomId + '/kick', {
+        method: 'POST', body: JSON.stringify({ pubkey }),
+      });
+      toast('Kicked.');
+      await refreshRooms();
+    } catch (e) { toast('Kick failed: ' + e.message, 'err'); }
   }
 
   function renderPending() {

@@ -101,6 +101,20 @@ fi
 log "Building"
 $PM run build --silent
 
+# ---------- optional: install Electron shell ----------
+# Opt-in. Electron is ~200 MB; most users are fine with the default
+# browser shell, so we don't install it automatically.
+if [ "${AGENTCHAT_ELECTRON:-0}" = "1" ]; then
+  log "Installing Electron (opt-in — ~200 MB)"
+  if [ "$PM" = pnpm ]; then
+    pnpm add --silent electron >/dev/null 2>&1 \
+      || warn "Electron install failed — the MCP will fall back to opening a browser"
+  else
+    npm install --silent --no-audit --no-fund electron >/dev/null 2>&1 \
+      || warn "Electron install failed — the MCP will fall back to opening a browser"
+  fi
+fi
+
 # ---------- symlink the bins ----------
 mkdir -p "$BIN_DIR"
 chmod +x "$INSTALL_DIR/dist/bin/agentchat.js" "$INSTALL_DIR/dist/bin/agentchat-mcp.js"

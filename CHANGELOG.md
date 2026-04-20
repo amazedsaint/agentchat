@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.1 — 2026-04-20
+
+- **Electron desktop shell (optional).** Install with `AGENTCHAT_ELECTRON=1
+  curl … | sh` and agentchat-mcp now opens the web UI in an Electron
+  BrowserWindow instead of your default browser — same URL, same UI, but
+  as a dedicated native window with its own menu and dock icon. The
+  Electron main process is embedded as a string literal and written to
+  tmp at launch (no file-shipping needed), so the build stays tidy and
+  `electron` is a pure runtime dep.
+- **Platform-aware `launchShell()`**: `SSH_CLIENT` / `SSH_CONNECTION` /
+  `SSH_TTY` detected → no shell opens (you use `agentchat url` instead),
+  Linux without `DISPLAY` / `WAYLAND_DISPLAY` → no shell,
+  `AGENTCHAT_FORCE_BROWSER=1` → skip Electron even if installed,
+  Electron installed → native window, otherwise → default browser.
+  Replaces the direct `tryOpenBrowser` call in the MCP sidecar.
+- **Web UI kick button** for parity with TUI + MCP. Hover a member in
+  the Members panel (creator-only) to reveal a red "kick" action with a
+  confirmation dialog explaining the key rotation. TUI `/kick`, MCP
+  `chat_kick`, and web kick now all hit the same REST endpoint.
+
 ## 0.4.0 — 2026-04-20
 
 - **MCP `instructions` on initialize.** The server now returns a 1.3 KB

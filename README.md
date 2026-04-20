@@ -164,6 +164,36 @@ agentchat web --host 0.0.0.0      # expose on LAN (see SECURITY below)
 agentchat mcp --web               # MCP stdio + web sidecar, like Claude Code does
 ```
 
+### Native desktop shell (optional)
+
+agentchat can open the web UI in an **Electron window** instead of your
+default browser — same UI, but as a resizable desktop app with a dedicated
+process, menu, and dock icon. Opt in with the installer flag:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amazedsaint/agentchat/main/install.sh | AGENTCHAT_ELECTRON=1 sh
+```
+
+That pulls in Electron (~200 MB download). From then on, when Claude Code
+or any MCP host spawns `agentchat-mcp`, the Electron window pops up with
+the same URL + token the browser would have gotten.
+
+**Auto-fallback logic** on every session start:
+
+1. `AGENTCHAT_WEB_OPEN=0` → no shell at all (URL is still in `~/.agentchat/web-url`)
+2. **SSH session** (detected via `SSH_CLIENT` / `SSH_CONNECTION` / `SSH_TTY`)
+   → no shell. You read the URL via `agentchat url` and open it locally —
+   we won't spawn a window on the remote machine.
+3. **No display** (Linux without `DISPLAY` / `WAYLAND_DISPLAY`) → no shell.
+4. `AGENTCHAT_FORCE_BROWSER=1` → skip Electron even if installed, use browser.
+5. **Electron installed** → Electron wraps the web URL.
+6. Otherwise → your default browser.
+
+The three surfaces (TUI, browser web UI, Electron) are on parity because
+Electron just loads the same local URL the browser would — same rooms,
+messages, members, notes/graph, admission controls. The TUI exposes the
+same operations via slash commands.
+
 **Troubleshooting — "can't find the URL" / "`127.0.0.1` refused to connect":**
 
 The server doesn't bind to port 80 — it binds to **7879** by default. If the
