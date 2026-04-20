@@ -439,27 +439,31 @@ function App({ manager, repo }: { manager: RoomManager; repo: Repo }) {
         <Box
           borderStyle="round"
           borderColor="cyan"
-          paddingX={1}
+          paddingX={2}
           paddingY={0}
           flexDirection="column"
           flexGrow={1}
         >
-          <Text bold color="cyan">
-            {overlay === 'help' ? 'Help' : 'Invite'}
-          </Text>
-          <Box marginTop={1} flexDirection="column">
-            {overlayText.split('\n').map((line, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: lines are static text; position is the identity.
-              <Text key={`ov-${i}`}>{line || ' '}</Text>
-            ))}
+          <Box marginBottom={1}>
+            <Text bold color="cyanBright">
+              {overlay === 'help' ? '?  Help' : '◆  Invite'}
+            </Text>
           </Box>
+          {overlayText.split('\n').map((line, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static text; index is identity.
+            <Text key={`ov-${i}`}>{line || ' '}</Text>
+          ))}
         </Box>
         <Box paddingX={1}>
-          <Text dimColor>press Esc or q to close</Text>
+          <Text dimColor>Esc or q to close</Text>
         </Box>
       </Box>
     );
   }
+
+  const accentColor = activeRoomId ? 'cyan' : 'gray';
+  const rule = (n: number) => '─'.repeat(Math.max(n, 4));
+  const mineHex = bytesToHex(manager.identity.publicKey);
 
   return (
     <Box flexDirection="column" height={rows}>
@@ -468,32 +472,55 @@ function App({ manager, repo }: { manager: RoomManager; repo: Repo }) {
         <Box
           flexDirection="column"
           width={sidebarWidth}
-          borderStyle="single"
+          borderStyle="round"
           borderColor="gray"
           paddingX={1}
         >
-          <Text bold>Rooms {rooms.length > 0 ? <Text dimColor>· {rooms.length}</Text> : null}</Text>
-          <Box marginTop={1} flexDirection="column">
+          <Box>
+            <Text color="magentaBright" bold>
+              ◆{' '}
+            </Text>
+            <Text bold>agentchat</Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>ROOMS </Text>
+            {rooms.length > 0 ? <Text dimColor>{rooms.length}</Text> : null}
+          </Box>
+          <Text color="gray" dimColor>
+            {rule(sidebarWidth - 4)}
+          </Text>
+          <Box flexDirection="column">
             {rooms.length === 0 ? (
-              <Text dimColor>none — /create or /join</Text>
-            ) : (
-              rooms.map((r) => (
-                <Box key={r.id}>
-                  <Text color={r.id === activeRoomId ? 'cyan' : undefined} wrap="truncate">
-                    {r.id === activeRoomId ? '▶ ' : '  '}
-                    {r.name.length > sidebarWidth - 5
-                      ? `${r.name.slice(0, sidebarWidth - 5)}…`
-                      : r.name}
-                  </Text>
-                  {r.isCreator && r.pendingCount > 0 ? (
-                    <Text color="yellow" bold>
-                      {' '}
-                      ({r.pendingCount})
-                    </Text>
-                  ) : null}
-                  {r.admission === 'approval' ? <Text color="yellow"> ●</Text> : null}
+              <Box flexDirection="column" marginTop={1}>
+                <Text dimColor>No rooms yet.</Text>
+                <Box marginTop={1} flexDirection="column">
+                  <Text color="cyan">/create name</Text>
+                  <Text color="cyan">/join ticket</Text>
                 </Box>
-              ))
+              </Box>
+            ) : (
+              rooms.map((r) => {
+                const active = r.id === activeRoomId;
+                const maxLen = Math.max(sidebarWidth - 9, 6);
+                const clean = r.name.replace(/^#/, '');
+                const display = clean.length > maxLen ? `${clean.slice(0, maxLen - 1)}…` : clean;
+                return (
+                  <Box key={r.id}>
+                    <Text color={active ? 'cyanBright' : 'gray'}>{active ? '▌' : ' '}</Text>
+                    <Text color={active ? 'cyanBright' : 'gray'}> #</Text>
+                    <Text color={active ? 'cyanBright' : undefined} bold={active}>
+                      {display}
+                    </Text>
+                    {r.admission === 'approval' ? <Text color="yellow"> ●</Text> : null}
+                    {r.isCreator && r.pendingCount > 0 ? (
+                      <Text color="yellow" bold>
+                        {' '}
+                        +{r.pendingCount}
+                      </Text>
+                    ) : null}
+                  </Box>
+                );
+              })
             )}
           </Box>
         </Box>
@@ -502,32 +529,42 @@ function App({ manager, repo }: { manager: RoomManager; repo: Repo }) {
         <Box
           flexDirection="column"
           flexGrow={1}
-          borderStyle="single"
-          borderColor="gray"
+          borderStyle="round"
+          borderColor={accentColor}
           paddingX={1}
           minWidth={0}
         >
           <Box>
-            <Text bold>{activeRoom ? `#${activeRoom.name.replace(/^#/, '')}` : '(no room)'}</Text>
-            {activeRoom?.admission === 'approval' ? <Text color="yellow"> [approval]</Text> : null}
-            {activeRoom?.topic ? <Text dimColor> · {activeRoom.topic}</Text> : null}
+            <Text color={accentColor} bold>
+              {activeRoom ? '# ' : '  '}
+            </Text>
+            <Text bold>{activeRoom ? activeRoom.name.replace(/^#/, '') : 'no room selected'}</Text>
+            {activeRoom?.admission === 'approval' ? <Text color="yellow"> ● approval</Text> : null}
+            {activeRoom?.topic ? <Text dimColor> {activeRoom.topic}</Text> : null}
           </Box>
-          <Box flexDirection="column" flexGrow={1} marginTop={1}>
+          <Text color="gray" dimColor>
+            {rule(Math.max(cols - sidebarWidth - (showAside ? asideWidth : 0) - 6, 8))}
+          </Text>
+          <Box flexDirection="column" flexGrow={1}>
             {messages.length === 0 ? (
-              <Text dimColor>No messages yet. Say hi 👋</Text>
+              <Box marginTop={2} paddingX={2} flexDirection="column">
+                <Text dimColor>No messages yet.</Text>
+                <Text dimColor>Type a message below, or /invite to share the room.</Text>
+              </Box>
             ) : (
-              messages.slice(-(rows - 8)).map((m, i) => {
-                const prev = i > 0 ? messages.slice(-(rows - 8))[i - 1] : null;
-                const grouped = prev && prev.sender === m.sender;
+              messages.slice(-(rows - 9)).map((m, i, arr) => {
+                const prev = i > 0 ? arr[i - 1] : null;
+                const grouped = !!prev && prev.sender === m.sender;
+                const isYou = m.sender === mineHex;
                 return (
                   <Text key={m.id} wrap="wrap">
                     {!grouped ? (
                       <>
-                        <Text dimColor>[{fmtTime(m.ts)}]</Text>{' '}
-                        <Text color="green" bold>
+                        <Text dimColor>{fmtTime(m.ts)} </Text>
+                        <Text color={isYou ? 'greenBright' : 'cyanBright'} bold>
                           @{m.nickname || m.sender.slice(0, 8)}
                         </Text>
-                        {': '}
+                        <Text dimColor> </Text>
                       </>
                     ) : (
                       <Text> </Text>
@@ -545,56 +582,84 @@ function App({ manager, repo }: { manager: RoomManager; repo: Repo }) {
           <Box
             flexDirection="column"
             width={asideWidth}
-            borderStyle="single"
+            borderStyle="round"
             borderColor="gray"
             paddingX={1}
           >
             {pending.length > 0 ? (
               <Box flexDirection="column" marginBottom={1}>
-                <Text bold color="yellow">
-                  Pending · {pending.length}
+                <Box>
+                  <Text color="yellow" bold>
+                    ⚑ PENDING{' '}
+                  </Text>
+                  <Text color="yellow">{pending.length}</Text>
+                </Box>
+                <Text color="gray" dimColor>
+                  {rule(asideWidth - 4)}
                 </Text>
                 {pending.map((p) => (
-                  <Box key={p.pubkey} flexDirection="column" marginTop={1}>
-                    <Text>@{p.nickname}</Text>
+                  <Box key={p.pubkey} flexDirection="column" marginTop={1} marginBottom={1}>
+                    <Text bold>@{p.nickname}</Text>
                     <Text dimColor wrap="truncate">
-                      {p.pubkey.slice(0, asideWidth - 4)}…
+                      {p.pubkey.slice(0, 12)}…
                     </Text>
                     <Text color="cyan">/approve {p.pubkey.slice(0, 8)}</Text>
                   </Box>
                 ))}
               </Box>
             ) : null}
-            <Text bold>
-              Members {members.length > 0 ? <Text dimColor>· {members.length}</Text> : null}
+            <Box>
+              <Text dimColor bold>
+                MEMBERS{' '}
+              </Text>
+              {members.length > 0 ? <Text dimColor>{members.length}</Text> : null}
+            </Box>
+            <Text color="gray" dimColor>
+              {rule(asideWidth - 4)}
             </Text>
-            <Box marginTop={1} flexDirection="column">
-              {members.map((m) => (
-                <Text key={m.pubkey} color={m.you ? 'green' : undefined} wrap="truncate">
-                  @{m.nickname || m.pubkey.slice(0, 8)}
-                  {m.you ? ' (you)' : ''}
-                </Text>
-              ))}
+            <Box flexDirection="column">
+              {members.length === 0 ? (
+                <Text dimColor>—</Text>
+              ) : (
+                members.map((m) => (
+                  <Box key={m.pubkey}>
+                    <Text color={m.you ? 'greenBright' : 'gray'}>●</Text>
+                    <Text> </Text>
+                    <Text color={m.you ? 'greenBright' : undefined} bold={m.you} wrap="truncate">
+                      @{m.nickname || m.pubkey.slice(0, 8)}
+                    </Text>
+                  </Box>
+                ))
+              )}
             </Box>
           </Box>
         ) : null}
       </Box>
 
       {/* Composer */}
-      <Box borderStyle="single" borderColor={activeRoomId ? 'cyan' : 'gray'} paddingX={1}>
-        <Text color={activeRoomId ? 'cyan' : 'gray'}>{activeRoomId ? '›' : '…'} </Text>
+      <Box borderStyle="round" borderColor={accentColor} paddingX={1}>
+        <Text color={accentColor} bold>
+          {activeRoomId ? '›' : '…'}
+        </Text>
+        <Text> </Text>
         <TextInput
           value={input}
           onChange={setInput}
           onSubmit={onSubmit}
-          placeholder={activeRoomId ? 'message or /help' : '/create <name>   or   /join <ticket>'}
+          placeholder={
+            activeRoomId
+              ? `message #${activeRoom?.name.replace(/^#/, '') || ''}   ·   /help`
+              : '/create <name>    or    /join <ticket>'
+          }
         />
       </Box>
 
       {/* Status bar */}
       <Box paddingX={1} justifyContent="space-between">
-        <Text dimColor>@{nickname} · ^N/^P rooms · ^H help · ^C quit</Text>
-        <Text color={status.startsWith('err') ? 'red' : 'gray'}>{status}</Text>
+        <Text dimColor>
+          <Text color={accentColor}>●</Text> @{nickname} ^N/^P rooms ^H help ^C quit
+        </Text>
+        <Text color={status.startsWith('err') ? 'redBright' : 'gray'}>{status}</Text>
       </Box>
     </Box>
   );

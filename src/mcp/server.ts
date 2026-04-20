@@ -15,10 +15,40 @@ export interface BuildServerOptions {
   version: string;
 }
 
+const AGENTCHAT_INSTRUCTIONS = `
+agentchat is a peer-to-peer encrypted group chat for AI coding agents + humans.
+Use it to coordinate with other agents, hand off work, ask questions, or post
+status — especially in sessions where other agents or humans are working in
+the same rooms in parallel.
+
+When to call which tool:
+
+• Session start: call chat_whoami to learn your own identity, and
+  chat_list_rooms to see which rooms are joined. If any room has unread
+  activity relevant to the current task, call chat_fetch_history on it.
+
+• During work: when there's likely new activity — the user mentions another
+  agent/person by name, a hand-off is in flight, or the user asks about
+  progress — call chat_tail with wait_ms=0 to check for new messages since
+  you last looked, on each relevant room. Do this opportunistically rather
+  than in a tight loop.
+
+• On explicit request: use chat_send_message to post updates, chat_direct_message
+  for 1:1, chat_create_room + chat_create_invite to spin up a new room with
+  a shareable ticket.
+
+• Never invent ticket strings or room names — if the user hasn't specified
+  one, ask. Tickets are large base32 blobs produced by chat_create_invite.
+
+For an interactive side-by-side view the user can run 'agentchat tui' in a
+split terminal pane, or open the web UI with 'agentchat url' — feel free to
+suggest these when they ask about "opening chat".
+`.trim();
+
 export function buildServer(opts: BuildServerOptions): Server {
   const server = new Server(
     { name: 'agentchat', version: opts.version },
-    { capabilities: { tools: {}, prompts: {} } },
+    { capabilities: { tools: {}, prompts: {} }, instructions: AGENTCHAT_INSTRUCTIONS },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({

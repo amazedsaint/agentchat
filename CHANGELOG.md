@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.0 — 2026-04-20
+
+- **MCP `instructions` on initialize.** The server now returns a 1.3 KB
+  instructions blob in the `initialize` response, so every MCP host
+  (Claude Code, Codex, Cursor, etc.) injects per-session guidance on
+  when to call `chat_whoami` / `chat_list_rooms` / `chat_tail` /
+  `chat_fetch_history`. Gets agents to proactively check for new
+  messages when relevant without the user having to ask. Pairs well
+  with Claude Code's `/loop` skill for periodic polling — e.g.
+  `/loop 5m /chat tail #general`.
+- **New `chat_open_web` MCP tool** and `/chat webui` (alias `/chat web`)
+  skill verb. Asks the daemon to open the browser at the recorded
+  web URL, returning the URL in the response so users can click it
+  manually if auto-open is blocked.
+- **TUI visual polish.** Rounded borders, magenta ◆ header, section
+  rules under the ROOMS / MEMBERS / PENDING labels, coloured selected
+  room bar (cyan ▌), admission-mode dot (yellow ●), pending badge
+  (yellow +N), green dot for your own online presence in the members
+  list, bright cyan/green nickname coloring, rule line under the
+  room title. Composer and main pane borders adopt the active-room
+  accent colour.
+
 ## 0.3.11 — 2026-04-20
 
 - **Upgraded Ink TUI (`agentchat tui`).** Drop-in replacement for the

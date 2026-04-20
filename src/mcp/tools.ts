@@ -667,6 +667,32 @@ const graphNeighbors: ToolDef<{ room: string; node: string; depth?: number; limi
   },
 };
 
+const openWeb: ToolDef<Record<string, never>> = {
+  name: 'chat_open_web',
+  description:
+    "Return the local web UI URL (with auto-login token) and attempt to open it in the user's default browser. Call this when the user asks to open the chat / web UI / switch to the browser view.",
+  inputSchema: z.object({}).strict(),
+  handler: async () => {
+    const { readWebUrl } = await import('../web/url-file.js');
+    const url = readWebUrl();
+    if (!url) {
+      return err(
+        'No web UI URL recorded. Start the server with `agentchat web` or restart the MCP session (the sidecar writes the URL on boot).',
+      );
+    }
+    try {
+      const { tryOpenBrowser } = await import('../web/open-browser.js');
+      tryOpenBrowser(url);
+    } catch {
+      // best-effort — URL is still returned to the caller
+    }
+    return ok(`Opening ${url}\n\nIf no browser opened, click or paste the URL above.`, {
+      url,
+      opened_browser: true,
+    });
+  },
+};
+
 export const ALL_TOOLS: ToolDef<any>[] = [
   whoami,
   createRoom,
@@ -694,4 +720,5 @@ export const ALL_TOOLS: ToolDef<any>[] = [
   listPending,
   approveJoin,
   denyJoin,
+  openWeb,
 ];
