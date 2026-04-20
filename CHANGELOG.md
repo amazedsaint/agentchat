@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.8 — 2026-04-20
+
+- **Fix: orphaned browser tab during install.** When `claude mcp add`
+  registers agentchat, it probes the server by spawning it, sending
+  `initialize`, then closing stdin ~200ms later. Our auto-open fired
+  immediately after the server started listening, leaving a browser
+  tab pointing at a server that was already shutting down. Now the open
+  is delayed 1.5 s and cancelled on any teardown signal (`stdin end` /
+  `SIGTERM` / `SIGINT` / `beforeExit`). Fast probes no longer open
+  anything; real sessions keep stdin open for minutes, so the timer
+  fires normally.
+- **Rewritten post-install banner** — grouped sections for *Using with
+  Claude Code* / *Using standalone* / *Sign-in token* / *Uninstall*,
+  with coloured command hints, a warning if `$BIN_DIR` isn't on PATH,
+  and a note on how to retrieve the token once the server has first
+  run (`agentchat url`).
+
 ## 0.3.7 — 2026-04-20
 
 - **Fix "Login failed: Failed to execute 'appendChild' on 'Node'".** When

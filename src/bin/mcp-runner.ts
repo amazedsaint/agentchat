@@ -85,7 +85,21 @@ async function launchWebSidecar(manager: RoomManager, repo: Repo): Promise<void>
   process.stderr.write('  │  recover anytime with:  agentchat url\n');
   process.stderr.write('  └─────────────────────────────────────────────────────────\n\n');
 
-  if (process.env.AGENTCHAT_WEB_OPEN !== '0') tryOpenBrowser(url);
+  if (process.env.AGENTCHAT_WEB_OPEN !== '0') {
+    // Delay the browser open so short-lived verification probes (e.g.
+    // `claude mcp add` spawns agentchat-mcp, sends an initialize, then
+    // closes stdin to see that it responded) don't leave an orphaned tab
+    // pointing at a server that's already shutting down. A real Claude
+    // Code session keeps stdin open for the whole session, so the timer
+    // fires and the browser opens normally.
+    const openTimer = setTimeout(() => tryOpenBrowser(url), 1500);
+    const cancel = () => clearTimeout(openTimer);
+    process.once('SIGTERM', cancel);
+    process.once('SIGINT', cancel);
+    process.once('beforeExit', cancel);
+    process.stdin.once('end', cancel);
+    process.stdin.once('close', cancel);
+  }
 }
 
 export async function runHttpServer(host: string, port: number): Promise<void> {

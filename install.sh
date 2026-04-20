@@ -96,16 +96,51 @@ if [ "${AGENTCHAT_SKIP_MCP:-0}" != "1" ] && command -v claude >/dev/null 2>&1; t
 fi
 
 # ---------- PATH hint ----------
+on_path=1
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *)
-    warn "$BIN_DIR is not on your PATH."
-    printf '       Add this to your ~/.bashrc / ~/.zshrc:\n\n'
-    printf '         export PATH="%s:$PATH"\n\n' "$BIN_DIR"
-    ;;
+  *) on_path=0 ;;
 esac
 
-log "Done."
-log "Health check:        $BIN_DIR/agentchat doctor"
-log "Start the web UI:    $BIN_DIR/agentchat web"
-log "Uninstall:           rm -rf \"$INSTALL_DIR\" \"$BIN_DIR/agentchat\" \"$BIN_DIR/agentchat-mcp\""
+# ---------- post-install banner ----------
+printf '\n'
+printf '\033[1;32m  ✓ agentchat is installed.\033[0m\n'
+printf '\n'
+printf '  \033[1mUsing with Claude Code\033[0m\n'
+if command -v claude >/dev/null 2>&1; then
+  printf '    agentchat is registered as an MCP server. Start a new\n'
+  printf '    Claude Code session — type \033[36m/chat help\033[0m to see the commands.\n'
+else
+  printf '    Install Claude Code (https://claude.com/claude-code), then:\n'
+  printf '      \033[36mclaude mcp add agentchat -s user -- %s/agentchat-mcp\033[0m\n' "$BIN_DIR"
+fi
+printf '    The web UI auto-opens at \033[36mhttp://127.0.0.1:7879\033[0m when\n'
+printf '    a session starts. Your sign-in token is injected into the URL.\n'
+printf '\n'
+printf '  \033[1mUsing standalone\033[0m\n'
+printf '    \033[36m%s\033[0m              start the web UI manually\n' "agentchat web"
+printf '    \033[36m%s\033[0m              print the sign-in URL (with token)\n' "agentchat url"
+printf '    \033[36m%s\033[0m           health check + URL\n' "agentchat doctor"
+printf '    \033[36m%s\033[0m           full command list\n' "agentchat --help"
+printf '\n'
+printf '  \033[1mSign-in token\033[0m\n'
+printf '    Generated on first run and stored at \033[36m~/.agentchat/web-token\033[0m\n'
+printf '    (mode 0600). If the auto-opened browser doesn'"'"'t show up or you\n'
+printf '    close the tab, run \033[36magentchat url\033[0m for the full sign-in URL.\n'
+printf '\n'
+printf '  \033[1mUninstall\033[0m\n'
+printf '    rm -rf %s \\\n' "$INSTALL_DIR"
+printf '           %s/agentchat %s/agentchat-mcp \\\n' "$BIN_DIR" "$BIN_DIR"
+printf '           ~/.claude/skills/chat\n'
+if command -v claude >/dev/null 2>&1; then
+  printf '    claude mcp remove agentchat\n'
+fi
+printf '    # (optional, removes identity + sqlite + token)\n'
+printf '    # rm -rf ~/.agentchat\n'
+printf '\n'
+
+if [ "$on_path" -eq 0 ]; then
+  printf '  \033[1;33m⚠  %s is not on your PATH.\033[0m\n' "$BIN_DIR"
+  printf '     Add this to your ~/.bashrc or ~/.zshrc:\n\n'
+  printf '       export PATH="%s:$PATH"\n\n' "$BIN_DIR"
+fi
