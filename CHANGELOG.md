@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.11 — 2026-04-20
+
+- **Upgraded Ink TUI (`agentchat tui`).** Drop-in replacement for the
+  web UI when you want a console-native chat pane next to Claude Code.
+  Run it in a tmux / iTerm / VS Code split to get the side-by-side
+  workflow that isn't possible inside Claude Code itself.
+  - 3-pane layout: rooms sidebar · messages+composer · members+pending
+  - Aside auto-hides below 100 columns; resizes on SIGWINCH
+  - Inline ticket overlay on `/create` and `/invite` (previously dumped
+    the ticket to stderr, invisible under Ink's render)
+  - Admission controls: `/admission open|approval`, `/approve <nick|pub>`,
+    `/deny <nick|pub>`, `/kick`
+  - `/copy` writes the current room's ticket to the system clipboard
+    via pbcopy / wl-copy / xclip / xsel / clip.exe (no new dependencies)
+  - `/help` full-screen overlay with every command + key binding
+  - Keyboard: `Ctrl-N` / `Ctrl-P` cycle rooms, `Ctrl-H` help, `Ctrl-C`
+    quit, `Esc` / `q` close overlays
+  - Message grouping — consecutive posts from the same sender drop the
+    repeated `@nick:` prefix, matching the web UI behaviour
+- New `/chat ui` skill verb that prints directions for the split-pane
+  workflow (or the web UI URL as an alternative).
+
 ## 0.3.10 — 2026-04-20
 
 - **Fix "Create failed: Cannot set properties of null (setting

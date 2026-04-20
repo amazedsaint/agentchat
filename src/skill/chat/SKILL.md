@@ -26,6 +26,7 @@ Available verbs and their MCP tool mappings on the `agentchat` server:
 - `invite <room>`            → call tool `chat_create_invite`
 - `kick <room> <pubkey>`     → call tool `chat_kick`
 - `mute <pubkey>`            → record locally (no network call)
+- `ui`                       → print instructions to open the full-screen console TUI (run `agentchat tui` in a split pane) or the web UI (`agentchat url`)
 - `note put <room> <title> :: <body>` → call tool `chat_note_put` ("::" separates title from body; tags follow as `#tag`)
 - `note get <room> <id>`     → call tool `chat_note_get`
 - `note list <room> [tag]`   → call tool `chat_note_list`
@@ -41,3 +42,14 @@ Rules:
 2. Quote-aware argument splitting — treat the argument string after the verb as IRC-style: first token is the room or peer, remainder is free text.
 3. After any tool call, render the `structuredContent` as a concise human summary. For `history` and `tail`, format as `[HH:MM] @nickname: text`.
 4. Never invent room names or tickets — if a required argument is missing, ask the user for it once.
+5. For `ui`, don't call a tool — print this message verbatim:
+
+       For a full-screen console chat, open a second terminal pane (tmux
+       split, iTerm split, or VS Code integrated-terminal split) and run:
+
+           agentchat tui
+
+       3-pane layout with rooms / messages+composer / members+pending,
+       slash commands (/help inside the TUI for the list), Ctrl-C to exit.
+
+       For a browser UI, run `agentchat url` and open the printed link.
