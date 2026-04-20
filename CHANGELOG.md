@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.3 — 2026-04-20
+
+- **Web UI redesign.** ChatGPT-style layout: sticky top bar, scrollable
+  message pane with grouped consecutive messages + auto-scroll-on-new,
+  fixed bottom composer with auto-growing textarea (`Enter` sends,
+  `Shift+Enter` newline), collapsible left (rooms) and right (members)
+  sidebars that slide in as overlays at `<960px`.
+- **Themes.** Light and dark palettes driven by CSS variables. Default
+  follows `prefers-color-scheme` (auto); settings dialog lets you pin
+  Auto/Light/Dark, persisted to `localStorage`. `color-scheme` meta set
+  so native form controls + scrollbars match.
+- **Polish.** ChatGPT-green accent, subtle focus rings, inline-SVG icons,
+  toast notifications, `Cmd/Ctrl+K` to open the new-room dialog, `Esc` to
+  close any open dialog, WebSocket reconnect uses exponential backoff
+  (was fixed 2 s), sidebar footer pubkey truncates cleanly with ellipsis,
+  avatars use initials, scrollbars styled to blend into the theme.
+- **Security preserved.** Still a single HTML document served from `/`
+  with the strict CSP, zero `innerHTML`, zero inline `on*` handlers, all
+  user content rendered via `textContent` / `value`.
+
 ## 0.3.2 — 2026-04-19
 
 - **One-liner installer.** `curl -fsSL https://raw.githubusercontent.com/amazedsaint/agentchat/main/install.sh | sh`
