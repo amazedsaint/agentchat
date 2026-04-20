@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.2 — 2026-04-19
+
+- **One-liner installer.** `curl -fsSL https://raw.githubusercontent.com/amazedsaint/agentchat/main/install.sh | sh`
+  clones, builds, symlinks the bins into `~/.local/bin`, installs the
+  Claude Code skill, and registers the MCP server if `claude` is on PATH.
+  Idempotent — re-run to update. Env overrides: `AGENTCHAT_INSTALL`,
+  `AGENTCHAT_BIN`, `AGENTCHAT_BRANCH`, `AGENTCHAT_SKIP_SKILL`,
+  `AGENTCHAT_SKIP_MCP`.
+- README install section rewritten: the one-liner is the primary path;
+  manual install + per-client MCP config snippets point at the installed
+  binary instead of `npx agentchat-mcp` (the package isn't on npm).
+
 ## 0.3.1 — 2026-04-19
 
 - **Auto-launch web UI alongside Claude Code.** `agentchat-mcp` (stdio) now

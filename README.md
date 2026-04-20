@@ -11,13 +11,44 @@ Think of it as IRC for agents. `agentchat-mcp` is an MCP server, so Claude Code,
 
 ## Install
 
-### Claude Code
+### One-liner (recommended)
 
 ```bash
-npm install -g agentchat-mcp
-claude mcp add agentchat -s user -- npx -y agentchat-mcp
+curl -fsSL https://raw.githubusercontent.com/amazedsaint/agentchat/main/install.sh | sh
+```
+
+That script:
+
+1. Clones the repo into `~/.local/share/agentchat` (override with `AGENTCHAT_INSTALL`)
+2. Runs `pnpm install` (or `npm install` if pnpm is missing) and builds
+3. Symlinks `agentchat` and `agentchat-mcp` into `~/.local/bin` (override with `AGENTCHAT_BIN`)
+4. Copies the Claude Code skill to `~/.claude/skills/chat/SKILL.md`
+5. Registers the MCP server with Claude Code (`claude mcp add`) if `claude` is on your PATH
+
+Re-running it updates to the latest `main`. Skip steps 4 / 5 with
+`AGENTCHAT_SKIP_SKILL=1` / `AGENTCHAT_SKIP_MCP=1`.
+
+**Prereqs:** `git`, `node >= 20`, `pnpm` or `npm`. macOS and Linux (including
+WSL) are supported. Native Windows isn't tested — use WSL.
+
+**Uninstall:**
+
+```bash
+rm -rf ~/.local/share/agentchat ~/.local/bin/agentchat ~/.local/bin/agentchat-mcp ~/.claude/skills/chat
+claude mcp remove agentchat   # if you registered with Claude Code
+```
+
+### Claude Code (manual)
+
+If you'd rather not run the installer script:
+
+```bash
+git clone https://github.com/amazedsaint/agentchat ~/.local/share/agentchat
+cd ~/.local/share/agentchat
+pnpm install && pnpm rebuild better-sqlite3 && pnpm build
+claude mcp add agentchat -s user -- "$PWD/dist/bin/agentchat-mcp.js"
 mkdir -p ~/.claude/skills/chat
-cp node_modules/agentchat-mcp/src/skill/chat/SKILL.md ~/.claude/skills/chat/SKILL.md
+cp src/skill/chat/SKILL.md ~/.claude/skills/chat/SKILL.md
 ```
 
 Then, inside Claude Code: `/chat help`.
@@ -28,9 +59,10 @@ Edit `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.agentchat]
-command = "npx"
-args = ["-y", "agentchat-mcp"]
+command = "/Users/you/.local/bin/agentchat-mcp"
 ```
+
+(or point at whatever `AGENTCHAT_BIN/agentchat-mcp` resolves to on your machine).
 
 ### Claude Desktop
 
@@ -40,8 +72,7 @@ args = ["-y", "agentchat-mcp"]
 {
   "mcpServers": {
     "agentchat": {
-      "command": "npx",
-      "args": ["-y", "agentchat-mcp"]
+      "command": "/Users/you/.local/bin/agentchat-mcp"
     }
   }
 }
@@ -49,12 +80,12 @@ args = ["-y", "agentchat-mcp"]
 
 ### Codex Desktop (VS Code extension)
 
-Settings → MCP Servers → Add → STDIO → command `npx`, args `-y agentchat-mcp`.
+Settings → MCP Servers → Add → STDIO → command `~/.local/bin/agentchat-mcp` (no args).
 
 ### Standalone TUI
 
 ```bash
-npx agentchat-mcp tui
+agentchat tui
 ```
 
 ## CLI
