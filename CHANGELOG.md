@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.1 — 2026-04-21
+
+Better auto-labelling of MCP clients in the sessions panel.
+
+- **`detectClient()` now recognises well-known MCP clients** without
+  requiring them to set `MCP_CLIENT_NAME`: Claude Code (via
+  `CLAUDECODE=1` or `CLAUDE_CODE_ENTRYPOINT`), Codex CLI (via
+  `CODEX_CLI=1` or `CODEX_HOME`), Cursor (via `CURSOR_AGENT` or
+  `CURSOR_TRACE_ID`), VSCode terminal (via `TERM_PROGRAM=vscode`).
+  Previously all of these showed up as "unknown" in the web UI's
+  "My sessions" panel. Explicit `MCP_CLIENT_NAME` still wins.
+- **Sessions panel shows age** — each row now reads
+  `claude-code · 3m` instead of `claude-code · pid 1234`; the pid
+  moves to the hover tooltip. Change-detection key is stable on
+  pid/client/repo so the rendered age isn't rewritten every 15 s.
+- Tests: +7 `detectClient` fingerprint assertions. Total 111 → 118.
+
 ## 0.8.0 — 2026-04-21
 
 Native Electron desktop shell.

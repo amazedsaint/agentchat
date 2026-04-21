@@ -1127,10 +1127,12 @@ export const UI_HTML = `<!doctype html>
     } catch (_) { /* ignore — web is usable without this */ }
   }
   function renderSessions(sessions) {
-    // Change-detection: skip DOM rebuild when the 15s poll returns an
-    // identical payload (tooltip state + layout survive).
+    // Change-detection: skip DOM rebuild when the 15s poll returns the
+    // same set of sessions. We intentionally DON'T include started_at age
+    // here — rendering a fresh age on every tick would thrash the DOM;
+    // users don't need second-level precision on "started 3m ago".
     const key = JSON.stringify(
-      sessions.map((s) => [s.id, s.last_seen, s.repo_name, s.client, s.pid]),
+      sessions.map((s) => [s.id, s.repo_name, s.client, s.pid]),
     );
     if (key === lastSessionsKey) return;
     lastSessionsKey = key;
@@ -1165,8 +1167,13 @@ export const UI_HTML = `<!doctype html>
         const av = document.createElement('div'); av.className = 'mini-avatar';
         av.textContent = sessionEmoji(s);
         const nick = document.createElement('span'); nick.className = 'nick';
-        nick.textContent = s.client + ' · pid ' + s.pid;
-        const titleLines = ['started ' + new Date(s.started_at).toLocaleTimeString()];
+        const age = Math.max(0, Math.floor((Date.now() - (s.started_at || 0)) / 1000));
+        const ageLabel = age < 60 ? age + 's' : age < 3600 ? Math.floor(age / 60) + 'm' : Math.floor(age / 3600) + 'h';
+        nick.textContent = s.client + ' · ' + ageLabel;
+        const titleLines = [
+          'pid ' + s.pid,
+          'started ' + new Date(s.started_at).toLocaleTimeString(),
+        ];
         if (s.cwd) titleLines.push('cwd: ' + s.cwd);
         nick.title = titleLines.join('\n');
         row.appendChild(av); row.appendChild(nick);

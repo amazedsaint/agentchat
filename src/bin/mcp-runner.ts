@@ -13,9 +13,19 @@ import { detectRepoRoom } from './repo-detect.js';
 const VERSION = '0.1.0';
 const SESSION_HEARTBEAT_MS = 30_000;
 
-function detectClient(): string {
-  // The env var is set by MCP clients in some cases; otherwise we guess from argv.
-  return process.env.MCP_CLIENT_NAME || 'unknown';
+/**
+ * Identify which MCP client spawned us. Preferred signal is the explicit
+ * `MCP_CLIENT_NAME` env var; if the client doesn't set that we sniff a few
+ * well-known fingerprints so Claude Code / Codex CLI / cursor don't show
+ * up as "unknown" in the sessions panel.
+ */
+export function detectClient(): string {
+  if (process.env.MCP_CLIENT_NAME) return process.env.MCP_CLIENT_NAME;
+  if (process.env.CLAUDECODE === '1' || process.env.CLAUDE_CODE_ENTRYPOINT) return 'claude-code';
+  if (process.env.CODEX_CLI === '1' || process.env.CODEX_HOME) return 'codex-cli';
+  if (process.env.CURSOR_AGENT || process.env.CURSOR_TRACE_ID) return 'cursor';
+  if (process.env.TERM_PROGRAM === 'vscode' && process.env.VSCODE_PID) return 'vscode';
+  return 'unknown';
 }
 
 /**
