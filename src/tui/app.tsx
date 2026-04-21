@@ -3,7 +3,7 @@ import TextInput from 'ink-text-input';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bytesToHex } from '../p2p/format.js';
 import type { RoomManager } from '../p2p/manager.js';
-import type { PendingRequest, Room } from '../p2p/room.js';
+import { type PendingRequest, type Room, clientKind } from '../p2p/room.js';
 import type { Repo } from '../store/repo.js';
 import { createTuiClient } from './client.js';
 
@@ -30,6 +30,7 @@ interface MemberView {
   pubkey: string;
   nickname: string;
   you: boolean;
+  kind: 'agent' | 'human' | 'unknown';
 }
 
 interface PendingView {
@@ -64,7 +65,14 @@ function membersOfRoom(r: Room | undefined, mePub: Uint8Array): MemberView[] {
     pubkey: bytesToHex(m.pubkey),
     nickname: m.nickname,
     you: bytesToHex(m.pubkey) === mine,
+    kind: clientKind(m.client),
   }));
+}
+
+function kindPrefix(kind: 'agent' | 'human' | 'unknown'): string {
+  if (kind === 'agent') return '\u{1F916} ';
+  if (kind === 'human') return '\u{1F464} ';
+  return '';
 }
 
 function pendingOfRoom(r: Room | undefined): PendingView[] {
@@ -187,15 +195,23 @@ function App({ manager, repo }: { manager: RoomManager; repo: Repo }) {
   // remove every one — this was the leak that stacked handlers on each
   // room-switch in the previous implementation.
   useEffect(() => {
-    const bound = new Map<string, (p: any) => void>();
+    const bound = new Map<string, { jr: (p: any) => void; nc: (p: any) => void }>();
     const bindRoom = (r: Room) => {
       if (bound.has(r.idHex)) return;
-      const handler = () => {
+      const jr = () => {
         if (activeRef.current === r.idHex) setPending(pendingOfRoom(r));
         snapshotRooms();
       };
-      r.on('join_request', handler);
-      bound.set(r.idHex, handler);
+      const nc = (info: { old_nickname?: string; new_nickname: string }) => {
+        const old = info.old_nickname || '';
+        setStatus(`@${old} → @${info.new_nickname}`);
+        if (activeRef.current === r.idHex) {
+          setMembers(membersOfRoom(r, manager.identity.publicKey));
+        }
+      };
+      r.on('join_request', jr);
+      r.on('nickname_changed', nc);
+      bound.set(r.idHex, { jr, nc });
     };
     for (const r of manager.rooms.values()) bindRoom(r);
 
@@ -235,9 +251,12 @@ function App({ manager, repo }: { manager: RoomManager; repo: Repo }) {
       manager.off('member_joined', onMembers);
       manager.off('member_joined', onRoomAppeared);
       manager.off('member_kicked', onRoomKicked);
-      for (const [id, fn] of bound) {
+      for (const [id, fns] of bound) {
         const r = manager.rooms.get(id);
-        if (r) r.off('join_request', fn);
+        if (r) {
+          r.off('join_request', fns.jr);
+          r.off('nickname_changed', fns.nc);
+        }
       }
       bound.clear();
     };
@@ -642,7 +661,7 @@ function App({ manager, repo }: { manager: RoomManager; repo: Repo }) {
                     <Text color={m.you ? 'greenBright' : 'gray'}>●</Text>
                     <Text> </Text>
                     <Text color={m.you ? 'greenBright' : undefined} bold={m.you} wrap="truncate">
-                      @{m.nickname || m.pubkey.slice(0, 8)}
+                      {kindPrefix(m.kind)}@{m.nickname || m.pubkey.slice(0, 8)}
                     </Text>
                   </Box>
                 ))

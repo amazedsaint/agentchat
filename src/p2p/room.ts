@@ -46,6 +46,35 @@ export interface MemberInfo {
   joined_at: number;
   x25519_pub: Uint8Array;
   online: boolean;
+  /** Client string from the peer's latest hello. Known agent clients get
+   * a 🤖 badge in UIs; known human clients get 👤. See clientKind() for
+   * the derivation. Empty string means we've never seen a hello yet. */
+  client: string;
+}
+
+/**
+ * Known client strings → 'agent' | 'human'. Everything else is treated as
+ * 'unknown' and shown as a human in UIs (conservative default — we'd rather
+ * not falsely label a human as a bot). New agent clients should be added
+ * to the agent list as they come online; the wire protocol doesn't change.
+ */
+const AGENT_CLIENTS = new Set([
+  'claude-code',
+  'codex-cli',
+  'claude-desktop',
+  'codex-desktop',
+  'cursor',
+  'windsurf',
+  'mcp',
+  'mcp-runner',
+]);
+const HUMAN_CLIENTS = new Set(['tui', 'web', 'cli']);
+
+export function clientKind(client: string | undefined | null): 'agent' | 'human' | 'unknown' {
+  if (!client) return 'unknown';
+  if (AGENT_CLIENTS.has(client)) return 'agent';
+  if (HUMAN_CLIENTS.has(client)) return 'human';
+  return 'unknown';
 }
 
 /**
@@ -325,13 +354,14 @@ export class Room extends EventEmitter {
 
   /** Seed our own roster entry. Called once — at room creation by the creator
    * or at ticket-join time by a joiner. */
-  initSelf(nickname: string): void {
+  initSelf(nickname: string, client = ''): void {
     const me: MemberInfo = {
       pubkey: this.identity.publicKey,
       nickname,
       joined_at: Date.now(),
       x25519_pub: this.identity.x25519PublicKey,
       online: true,
+      client,
     };
     this.members.set(base32Encode(me.pubkey), me);
     this.persistMember(me);
@@ -531,17 +561,28 @@ export class Room extends EventEmitter {
         // Bound the roster. An open-admission room would otherwise accept
         // new hellos without limit from unique pubkeys.
         if (!existing && this.members.size >= INBOUND_LIMITS.ROOM_MEMBERS) return false;
+        const prevNickname = existing?.nickname;
         const info: MemberInfo = {
           pubkey: env.from,
           nickname: inner.nickname,
           joined_at: existing?.joined_at ?? env.ts,
           x25519_pub: inner.x25519_pub,
           online: true,
+          client: inner.client,
         };
         this.members.set(key, info);
         this.persistMember(info);
         this.repo.touchContact(key, inner.nickname);
-        this.emit('member_joined', info);
+        if (!existing) {
+          this.emit('member_joined', info);
+        } else if (prevNickname !== inner.nickname) {
+          this.emit('nickname_changed', {
+            pubkey: env.from,
+            old_nickname: prevNickname,
+            new_nickname: inner.nickname,
+            info,
+          });
+        }
 
         // Only the creator replies with the authoritative members list and
         // catches up newcomers to the current epoch. Keeps handshake traffic O(n).
@@ -573,6 +614,9 @@ export class Room extends EventEmitter {
             joined_at: existing ? Math.min(existing.joined_at, m.joined_at) : m.joined_at,
             x25519_pub: m.x25519_pub,
             online: existing?.online ?? false,
+            // Gossip doesn't carry client — preserve whatever we already
+            // learned from that peer's hello.
+            client: existing?.client ?? '',
           };
           this.members.set(key, info);
           this.persistMember(info);
@@ -895,6 +939,7 @@ export class Room extends EventEmitter {
       joined_at: req.ts,
       x25519_pub: req.x25519_pub,
       online: true,
+      client: req.client || '',
     };
     this.members.set(key, info);
     this.persistMember(info);
@@ -926,6 +971,7 @@ export class Room extends EventEmitter {
       joined_at: new Date(m.joined_at).toISOString(),
       online: m.online ? 1 : 0,
       x25519_pub: base32Encode(m.x25519_pub),
+      client: m.client || '',
     });
   }
 

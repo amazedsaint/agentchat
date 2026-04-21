@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { base32ToHex, bytesToHex, parsePubkey } from '../p2p/format.js';
 import type { RoomManager } from '../p2p/manager.js';
+import { clientKind } from '../p2p/room.js';
 import { decodeTicket } from '../p2p/ticket.js';
 import type { Repo } from '../store/repo.js';
 import type { Member, Message, RoomSummary } from './types.js';
@@ -36,12 +37,16 @@ function memberToWire(m: {
   nickname: string;
   joined_at: number;
   online: boolean;
+  client?: string;
 }): Member {
+  const client = m.client || '';
   return {
     pubkey: bytesToHex(m.pubkey),
     nickname: m.nickname,
     online: m.online,
     joined_at: new Date(m.joined_at).toISOString(),
+    client,
+    kind: clientKind(client),
   };
 }
 

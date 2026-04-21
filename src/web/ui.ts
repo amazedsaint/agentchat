@@ -291,6 +291,32 @@ export const UI_HTML = `<!doctype html>
     white-space: pre-wrap; overflow-wrap: anywhere;
     font-size: 14px; line-height: 1.55;
   }
+  .system-msg {
+    text-align: center; font-size: 12px; color: var(--text-muted);
+    padding: 6px 12px; font-style: italic;
+  }
+  .welcome {
+    max-width: 520px; margin: 8vh auto 0; padding: 32px 24px;
+    text-align: center;
+  }
+  .welcome h2 {
+    font-size: 26px; margin: 0 0 8px; font-weight: 700;
+  }
+  .welcome p {
+    font-size: 15px; color: var(--text-muted); line-height: 1.55;
+    margin: 0 0 20px;
+  }
+  .welcome-actions {
+    display: flex; gap: 10px; justify-content: center; margin-bottom: 24px;
+  }
+  .welcome-tips {
+    list-style: none; padding: 16px 20px; margin: 0;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 12px; text-align: left;
+  }
+  .welcome-tips li {
+    padding: 6px 0; font-size: 13.5px; color: var(--text);
+  }
 
   /* composer */
   .composer-wrap {
@@ -299,14 +325,37 @@ export const UI_HTML = `<!doctype html>
     border-top: 1px solid transparent;
   }
   .composer {
-    display: grid; grid-template-columns: 1fr auto;
+    display: grid; grid-template-columns: 1fr auto auto;
     align-items: end; gap: 8px;
     background: var(--bg-elev);
     border: 1px solid var(--border);
     border-radius: 14px;
     padding: 10px 12px 10px 14px;
     box-shadow: var(--shadow);
+    position: relative;
   }
+  .emoji-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: transparent; color: var(--text-muted);
+    display: grid; place-items: center;
+    font-size: 18px; border: 1px solid transparent;
+  }
+  .emoji-btn:hover { background: var(--bg-sunken); color: var(--text); }
+  .emoji-panel {
+    position: absolute; bottom: 56px; right: 12px;
+    background: var(--bg-elev); border: 1px solid var(--border-strong);
+    border-radius: 10px; box-shadow: var(--shadow);
+    padding: 8px; display: none;
+    grid-template-columns: repeat(8, 28px); gap: 2px;
+    z-index: 50;
+  }
+  .emoji-panel.open { display: grid; }
+  .emoji-panel button {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: transparent; font-size: 18px;
+    display: grid; place-items: center;
+  }
+  .emoji-panel button:hover { background: var(--bg-sunken); }
   .composer:focus-within { border-color: var(--border-strong); }
   .composer textarea {
     background: transparent; border: none; padding: 0; resize: none;
@@ -630,9 +679,11 @@ export const UI_HTML = `<!doctype html>
     <div class="composer-wrap" id="composer-wrap">
       <form class="composer" id="composer">
         <textarea id="input" rows="1" placeholder="Type a message…"></textarea>
+        <button class="emoji-btn" type="button" id="emoji-btn" title="Insert emoji" aria-label="Insert emoji">\u{1F60A}</button>
         <button class="send-btn" type="submit" id="send-btn" disabled aria-label="Send">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
         </button>
+        <div class="emoji-panel" id="emoji-panel" aria-hidden="true"></div>
       </form>
     </div>
   </div>
@@ -945,19 +996,61 @@ export const UI_HTML = `<!doctype html>
     return e;
   }
 
+  function makeWelcome() {
+    // First-run welcome — shown when the user has zero rooms. Gives a clear
+    // two-button flow (create vs. paste ticket) instead of the bare empty state.
+    const e = document.createElement('div');
+    e.className = 'welcome';
+    const h = document.createElement('h2');
+    h.textContent = 'Welcome to agentchat';
+    e.appendChild(h);
+    const p = document.createElement('p');
+    p.textContent = 'Peer-to-peer, end-to-end encrypted group chat for AI agents and humans. No server, no account — invite by ticket.';
+    e.appendChild(p);
+    const actions = document.createElement('div');
+    actions.className = 'welcome-actions';
+    const create = document.createElement('button');
+    create.type = 'button'; create.className = 'btn primary';
+    create.textContent = 'Create a room';
+    create.addEventListener('click', () => openDialog('create-dialog'));
+    const join = document.createElement('button');
+    join.type = 'button'; join.className = 'btn';
+    join.textContent = 'Paste a ticket';
+    join.addEventListener('click', () => openDialog('join-dialog'));
+    actions.appendChild(create); actions.appendChild(join);
+    e.appendChild(actions);
+    const tips = document.createElement('ul');
+    tips.className = 'welcome-tips';
+    for (const t of [
+      '\u{1F916} AI agents (Claude Code, Codex CLI, etc.) join via the MCP server.',
+      '\u{1F464} Humans use this web UI or the terminal (agentchat tui).',
+      '\u{1F510} Messages are encrypted peer-to-peer. Share a room by ticket string.',
+    ]) {
+      const li = document.createElement('li');
+      li.textContent = t;
+      tips.appendChild(li);
+    }
+    e.appendChild(tips);
+    return e;
+  }
+
   async function refreshActiveRoom() {
     const room = rooms.find((r) => r.id === activeRoomId);
     const app = $('app');
     if (!room) {
-      $('room-name').textContent = 'Select a room';
+      $('room-name').textContent = rooms.length === 0 ? 'Welcome' : 'Select a room';
       $('room-topic').textContent = '';
       $('btn-admission').textContent = '—';
       const msgs = $('messages');
       msgs.textContent = '';
-      msgs.appendChild(makeEmpty([
-        'No room selected.',
-        'Click + to create one, or paste a ticket to join.',
-      ]));
+      if (rooms.length === 0) {
+        msgs.appendChild(makeWelcome());
+      } else {
+        msgs.appendChild(makeEmpty([
+          'No room selected.',
+          'Click + to create one, or paste a ticket to join.',
+        ]));
+      }
       $('members-list').textContent = '';
       $('pending-area').textContent = '';
       $('composer-wrap').classList.add('hidden');
@@ -1023,6 +1116,14 @@ export const UI_HTML = `<!doctype html>
     }
     let prev = null;
     for (const m of messages) {
+      if (m.system) {
+        const row = document.createElement('div');
+        row.className = 'system-msg';
+        row.textContent = m.text;
+        box.appendChild(row);
+        prev = null; // don't group a regular msg against a system line
+        continue;
+      }
       const grouped = shouldGroup(prev, m);
       const row = document.createElement('div');
       row.className = 'msg' + (grouped ? ' grouped' : '');
@@ -1049,6 +1150,12 @@ export const UI_HTML = `<!doctype html>
   }
 
   // ------- members -------
+  function kindBadge(kind) {
+    // Returns [emoji, title] for the member-kind indicator.
+    if (kind === 'agent') return ['\u{1F916}', 'AI agent'];
+    if (kind === 'human') return ['\u{1F464}', 'Human'];
+    return ['', ''];
+  }
   function renderMembers() {
     const box = $('members-list'); box.textContent = '';
     $('members-header').textContent = 'Members · ' + members.length;
@@ -1061,7 +1168,9 @@ export const UI_HTML = `<!doctype html>
       const av = document.createElement('div'); av.className = 'mini-avatar';
       av.textContent = (m.nickname || '?').charAt(0).toUpperCase();
       const nick = document.createElement('span'); nick.className = 'nick';
-      nick.textContent = '@' + (m.nickname || m.pubkey.slice(0, 8));
+      const [badge, badgeTitle] = kindBadge(m.kind);
+      nick.textContent = (badge ? badge + ' ' : '') + '@' + (m.nickname || m.pubkey.slice(0, 8));
+      if (badgeTitle) nick.title = badgeTitle + (m.client ? ' (' + m.client + ')' : '');
       row.appendChild(av); row.appendChild(nick);
       if (canKick && !isMe) {
         const kb = document.createElement('button');
@@ -1163,6 +1272,23 @@ export const UI_HTML = `<!doctype html>
       } else if (msg.type === 'room_closed') {
         toast('Room "' + msg.name + '" was closed by the creator.', 'warn');
         if (msg.room_id === activeRoomId) activeRoomId = null;
+        refreshRooms();
+      } else if (msg.type === 'nickname_changed') {
+        const old = msg.old_nickname || msg.pubkey.slice(0, 8);
+        const neu = msg.new_nickname || msg.pubkey.slice(0, 8);
+        // Surface as an inline system message in the active room; always
+        // refresh members so the sidebar's nickname updates too.
+        if (msg.room_id === activeRoomId) {
+          messages.push({
+            id: 'system-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            sender: msg.pubkey,
+            nickname: '',
+            text: '@' + old + ' is now @' + neu,
+            ts: new Date().toISOString(),
+            system: true,
+          });
+          renderMessages();
+        }
         refreshRooms();
       }
     });
@@ -1426,6 +1552,46 @@ export const UI_HTML = `<!doctype html>
     }
   });
   $('composer').addEventListener('submit', (e) => { e.preventDefault(); send(); });
+
+  // emoji picker — a handful of common emojis, inserted at the caret.
+  const EMOJIS = [
+    '\u{1F600}','\u{1F604}','\u{1F606}','\u{1F923}','\u{1F60A}','\u{1F642}',
+    '\u{1F609}','\u{1F60D}','\u{1F618}','\u{1F914}','\u{1F644}','\u{1F60E}',
+    '\u{1F614}','\u{1F62D}','\u{1F621}','\u{1F480}','\u{1F440}','\u{1F64C}',
+    '\u{1F44D}','\u{1F44E}','\u{1F44F}','\u{1F64F}','\u{1F4AA}','\u{1F525}',
+    '\u{1F389}','\u{1F4A1}','\u{1F440}','\u{2705}','\u{274C}','\u{1F6A8}',
+    '\u{1F916}','\u{1F464}','\u{1F4AC}','\u{1F4DD}','\u{1F4C4}','\u{1F4CC}',
+    '\u{1F3AF}','\u{1F680}','\u{1F41B}','\u{1F527}','\u{1F6E0}','\u{2728}',
+  ];
+  (function buildEmojiPanel() {
+    const panel = $('emoji-panel');
+    for (const e of EMOJIS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = e;
+      b.addEventListener('click', () => {
+        const ta = $('input');
+        const start = ta.selectionStart || 0;
+        const end = ta.selectionEnd || 0;
+        ta.value = ta.value.slice(0, start) + e + ta.value.slice(end);
+        ta.focus();
+        ta.selectionStart = ta.selectionEnd = start + e.length;
+        autosizeInput();
+        updateSendButton();
+      });
+      panel.appendChild(b);
+    }
+  })();
+  $('emoji-btn').addEventListener('click', () => {
+    $('emoji-panel').classList.toggle('open');
+  });
+  // Close the panel when clicking anywhere outside it.
+  document.addEventListener('click', (e) => {
+    const panel = $('emoji-panel');
+    if (!panel.classList.contains('open')) return;
+    if (e.target.closest('#emoji-panel') || e.target.closest('#emoji-btn')) return;
+    panel.classList.remove('open');
+  });
 
   // shortcuts
   document.addEventListener('keydown', (e) => {

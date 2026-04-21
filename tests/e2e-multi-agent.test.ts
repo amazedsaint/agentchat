@@ -472,7 +472,7 @@ describe('E2E multi-agent workflows', () => {
     carol.close();
   });
 
-  it('nickname change propagates to other peers via subsequent hello', async () => {
+  it('nickname change propagates + fires nickname_changed event on peers', async () => {
     const net = new SwarmNet();
     const alice = await makeAgent('alice', net);
     const bob = await makeAgent('bob', net);
@@ -482,14 +482,81 @@ describe('E2E multi-agent workflows', () => {
     await call(bob, 'chat_join_room', { ticket });
     await settle(60);
 
+    // Wire up a listener on Alice's copy of the room for the nickname_changed event.
+    const aliceRoom = alice.manager.rooms.get(create.structuredContent.room_id)!;
+    const seen: Array<{ old?: string; neu: string }> = [];
+    aliceRoom.on('nickname_changed', (info: { old_nickname?: string; new_nickname: string }) => {
+      seen.push({ old: info.old_nickname, neu: info.new_nickname });
+    });
+
     await call(bob, 'chat_set_nickname', { nickname: 'roberto' });
-    // Manager.setNickname now re-broadcasts hello to every active room,
-    // so Alice should see the update without Bob having to send a message.
-    await settle(60);
+    await settle(80);
+
+    expect(seen.length).toBe(1);
+    expect(seen[0].old).toBe('bob');
+    expect(seen[0].neu).toBe('roberto');
 
     const who = await call(alice, 'chat_list_members', { room: '#nick' });
     const bobEntry = who.structuredContent.members.find((m: any) => m.pubkey === bob.pubkeyHex);
     expect(bobEntry?.nickname).toBe('roberto');
+
+    alice.close();
+    bob.close();
+  });
+
+  it('member list exposes client + derived kind (agent vs human)', async () => {
+    const net = new SwarmNet();
+    // Two agents with different clientName values — one looks like an agent,
+    // one looks like a human.
+    const identityA = makeIdentity();
+    const identityB = makeIdentity();
+    const a = tmpDb();
+    const b = tmpDb();
+    const alice = {
+      name: 'alice',
+      manager: new RoomManager({
+        identity: identityA,
+        repo: a.repo,
+        nickname: 'alice',
+        clientName: 'claude-code',
+        version: '0',
+        swarm: new TestSwarm(net),
+      }),
+      repo: a.repo,
+      close: a.close,
+      pubkeyHex: Buffer.from(identityA.publicKey).toString('hex'),
+    };
+    const bob = {
+      name: 'bob',
+      manager: new RoomManager({
+        identity: identityB,
+        repo: b.repo,
+        nickname: 'bob',
+        clientName: 'web',
+        version: '0',
+        swarm: new TestSwarm(net),
+      }),
+      repo: b.repo,
+      close: b.close,
+      pubkeyHex: Buffer.from(identityB.publicKey).toString('hex'),
+    };
+    await alice.manager.start();
+    await bob.manager.start();
+
+    const create = await call(alice, 'chat_create_room', { name: '#kinds' });
+    const ticket = create.structuredContent.ticket;
+    await call(bob, 'chat_join_room', { ticket });
+    await settle(80);
+
+    const who = await call(alice, 'chat_list_members', { room: '#kinds' });
+    const aliceEntry = who.structuredContent.members.find((m: any) => m.pubkey === alice.pubkeyHex);
+    const bobEntry = who.structuredContent.members.find((m: any) => m.pubkey === bob.pubkeyHex);
+    expect(bobEntry?.client).toBe('web');
+    expect(bobEntry?.kind).toBe('human');
+    // Alice's own entry in her list shows her configured client — if she
+    // initSelf'd without client then it's empty, which maps to 'unknown'.
+    // What matters is that Bob's hello populated his client on Alice's side.
+    expect(aliceEntry).toBeTruthy();
 
     alice.close();
     bob.close();

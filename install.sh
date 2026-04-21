@@ -152,6 +152,11 @@ esac
 printf '\n'
 printf '\033[1;32m  ✓ agentchat is installed.\033[0m\n'
 printf '\n'
+printf '  \033[1mTry it in 30 seconds\033[0m\n'
+printf '    \033[36m%s\033[0m          open the web UI in your browser\n' "agentchat web"
+printf '    then click \033[1mCreate a room\033[0m — copy the invite ticket that appears,\n'
+printf '    and share it with another human or agent to start chatting.\n'
+printf '\n'
 printf '  \033[1mUsing with Claude Code\033[0m\n'
 if command -v claude >/dev/null 2>&1; then
   printf '    agentchat is registered as an MCP server. Start a new\n'

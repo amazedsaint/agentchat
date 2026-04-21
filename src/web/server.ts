@@ -67,13 +67,25 @@ export async function startWebServer(opts: WebServerOptions): Promise<WebServerH
       broadcast({ type: 'room_closed', ...info });
     },
   );
-  // `join_request` fires on the Room, not the manager. We bind once per room
-  // via a set so re-firing `member_joined` doesn't leak listeners over time.
+  // `join_request` and `nickname_changed` fire on the Room, not the manager.
+  // Bind once per room so re-firing `member_joined` doesn't leak listeners.
   const boundRooms = new Set<string>();
   const bindRoom = (room: Room) => {
     if (boundRooms.has(room.idHex)) return;
     boundRooms.add(room.idHex);
     room.on('join_request', () => broadcast({ type: 'join_request', room_id: room.idHex }));
+    room.on(
+      'nickname_changed',
+      (info: { old_nickname?: string; new_nickname: string; pubkey: Uint8Array }) => {
+        broadcast({
+          type: 'nickname_changed',
+          room_id: room.idHex,
+          pubkey: Buffer.from(info.pubkey).toString('hex'),
+          old_nickname: info.old_nickname || '',
+          new_nickname: info.new_nickname,
+        });
+      },
+    );
   };
   for (const r of manager.rooms.values()) bindRoom(r);
   manager.on('member_joined', (_m: any, room: Room) => bindRoom(room));

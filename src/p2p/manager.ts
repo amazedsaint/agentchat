@@ -130,6 +130,7 @@ export class RoomManager extends EventEmitter {
             joined_at: new Date(mem.joined_at).getTime(),
             x25519_pub: mem.x25519_pub ? base32Decode(mem.x25519_pub) : new Uint8Array(0),
             online: false,
+            client: mem.client || '',
           });
         } catch {
           // skip malformed row

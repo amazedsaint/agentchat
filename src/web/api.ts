@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { base32ToHex, bytesToHex, parsePubkey } from '../p2p/format.js';
 import { loadConfig, saveConfig } from '../p2p/identity.js';
 import type { RoomManager } from '../p2p/manager.js';
-import type { Room } from '../p2p/room.js';
+import { type Room, clientKind } from '../p2p/room.js';
 import type { Repo } from '../store/repo.js';
 
 const MAX_BODY = 256 * 1024; // 256 KB JSON body cap
@@ -72,12 +72,16 @@ function memberWire(m: {
   nickname: string;
   joined_at: number;
   online: boolean;
+  client?: string;
 }) {
+  const client = m.client || '';
   return {
     pubkey: bytesToHex(m.pubkey),
     nickname: m.nickname,
     online: m.online,
     joined_at: new Date(m.joined_at).toISOString(),
+    client,
+    kind: clientKind(client),
   };
 }
 
