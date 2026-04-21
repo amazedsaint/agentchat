@@ -13,6 +13,7 @@
 #   AGENTCHAT_NICKNAME=alice  pre-seed display name (skips the prompt)
 #   AGENTCHAT_BIO="..."       pre-seed bio (skips the prompt)
 #   AGENTCHAT_OPEN_BROWSER=0  skip the "open the web UI" prompt (headless mode)
+#   AGENTCHAT_ELECTRON=1|0    force-install or skip the native desktop shell
 
 set -eu
 
@@ -196,13 +197,55 @@ if [ -r /dev/tty ] && [ "${AGENTCHAT_NONINTERACTIVE:-0}" != "1" ]; then
   chmod 600 "$CONFIG_FILE"
   printf '  \033[32m✓\033[0m Saved to %s\n\n' "$CONFIG_FILE"
 
-  # Browser prompt
+  # ---- Electron native desktop shell (optional, ~130 MB) ----
+  INSTALL_ELECTRON=0
+  if [ "${AGENTCHAT_ELECTRON:-}" = "0" ]; then
+    :
+  elif [ "${AGENTCHAT_ELECTRON:-}" = "1" ]; then
+    INSTALL_ELECTRON=1
+  else
+    # Don't offer on headless / SSH — the shell can't show a window anyway.
+    if [ -z "${SSH_CLIENT:-}${SSH_CONNECTION:-}${SSH_TTY:-}" ]; then
+      if [ "$(uname)" = "Darwin" ] || [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] \
+         || [ "$(uname | tr '[:upper:]' '[:lower:]')" = "linux" ]; then
+        printf '  Install the native desktop app? (~130 MB; adds a polished\n'
+        printf '  Electron window, native notifications, dock badge for unread) [y/N] '
+        read -r want_electron < /dev/tty || want_electron=""
+        case "${want_electron:-n}" in
+          y|Y|yes|YES) INSTALL_ELECTRON=1 ;;
+          *)           INSTALL_ELECTRON=0 ;;
+        esac
+      fi
+    fi
+  fi
+  if [ "$INSTALL_ELECTRON" = "1" ]; then
+    (
+      cd "$INSTALL_DIR" && \
+      if command -v pnpm >/dev/null 2>&1; then
+        pnpm add electron >/dev/null 2>&1
+      else
+        npm install electron --no-save >/dev/null 2>&1
+      fi
+    )
+    if [ $? -eq 0 ]; then
+      printf '  \033[32m✓\033[0m Electron installed — agentchat web will open as a native app\n\n'
+    else
+      printf '  \033[33m!\033[0m Electron install failed — agentchat web will use your browser\n\n'
+      INSTALL_ELECTRON=0
+    fi
+  fi
+
+  # ---- Open the web UI now? ----
   if [ "${AGENTCHAT_OPEN_BROWSER:-}" = "0" ]; then
     open_browser=n
   elif [ "${AGENTCHAT_OPEN_BROWSER:-}" = "1" ]; then
     open_browser=y
   else
-    printf '  Open the web UI in your browser now? [Y/n] '
+    if [ "$INSTALL_ELECTRON" = "1" ]; then
+      printf '  Launch agentchat now? [Y/n] '
+    else
+      printf '  Open the web UI in your browser now? [Y/n] '
+    fi
     read -r open_browser < /dev/tty || open_browser=""
   fi
   case "${open_browser:-y}" in

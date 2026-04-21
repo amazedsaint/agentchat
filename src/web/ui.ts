@@ -929,6 +929,34 @@ export const UI_HTML = `<!doctype html>
   let pending = [];
   let ws = null;
   let wsBackoff = 800;
+  /** Unread count per room_id. Cleared on room-switch. Feeds the Electron
+   * dock/taskbar badge and native notifications when running under the
+   * shell. In a plain browser tab, agentchatShell is undefined so these
+   * become no-ops. */
+  const unread = new Map();
+  const shell = typeof window !== 'undefined' ? window.agentchatShell : undefined;
+
+  function totalUnread() {
+    let n = 0;
+    for (const v of unread.values()) n += v;
+    return n;
+  }
+  function updateBadgeAndNotify(wireMsg) {
+    if (!shell) return;
+    shell.setBadge(totalUnread());
+    try {
+      const room = rooms.find((r) => r.id === wireMsg.room_id);
+      const title = room ? room.name : 'agentchat';
+      const nick = wireMsg.payload && wireMsg.payload.nickname;
+      const text = wireMsg.payload && wireMsg.payload.text;
+      shell.notify(title, (nick ? '@' + nick + ': ' : '') + (text || ''));
+    } catch (_) { /* ignore */ }
+  }
+  function clearRoomUnread(roomId) {
+    if (!unread.has(roomId)) return;
+    unread.delete(roomId);
+    if (shell) shell.setBadge(totalUnread());
+  }
 
   // ------- api -------
   async function api(path, opts) {
@@ -964,6 +992,24 @@ export const UI_HTML = `<!doctype html>
       // plenty — it catches process start/stop within one cadence boundary.
       setInterval(refreshSessions, 15_000);
       openWs();
+      // Electron shell bridge: menu shortcuts + custom-protocol join URLs.
+      if (shell && shell.onShortcut) {
+        shell.onShortcut((name) => {
+          if (name === 'new-room') openDialog('create-dialog');
+          else if (name === 'join') openDialog('join-dialog');
+          else if (name && name.startsWith('room-')) {
+            const idx = Number.parseInt(name.slice('room-'.length), 10) - 1;
+            const target = rooms[idx];
+            if (target) selectRoom(target.id);
+          }
+        });
+      }
+      if (shell && shell.onJoinTicket) {
+        shell.onJoinTicket((ticket) => {
+          $('join-ticket').value = ticket;
+          openDialog('join-dialog');
+        });
+      }
       // First-run heuristic: default nickname is 'agent' and bio is empty.
       // Show onboarding so the user sets their identity before joining rooms.
       if ((!me.nickname || me.nickname === 'agent') && !me.bio) {
@@ -1169,6 +1215,7 @@ export const UI_HTML = `<!doctype html>
 
   async function selectRoom(id) {
     activeRoomId = id;
+    clearRoomUnread(id);
     renderRooms();
     if (window.matchMedia('(max-width: 960px)').matches) {
       $('app').classList.remove('sidebar-open');
@@ -1469,7 +1516,9 @@ export const UI_HTML = `<!doctype html>
         renderMessages();
         if (near) scrollToBottom();
       } else if (msg.type === 'message') {
-        // TODO: unread badge for other rooms
+        // Non-active room: bump unread, update badge + native notification.
+        unread.set(msg.room_id, (unread.get(msg.room_id) || 0) + 1);
+        updateBadgeAndNotify(msg);
       } else if (msg.type === 'join_request' ||
                  msg.type === 'member_joined' ||
                  msg.type === 'members_update' ||

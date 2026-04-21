@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.8.0 — 2026-04-21
+
+Native Electron desktop shell.
+
+The Electron-based desktop app is now a first-class frontend on par
+with the web UI and TUI. It loads the same
+`http://127.0.0.1:7879/#token=…` URL so they stay on parity, but adds:
+
+- **Polished chrome.** Native app name (not "Electron"), proper
+  about panel, `File` / `Rooms` / `View` / `Help` menus, platform-
+  correct `Cmd`/`Ctrl` accelerators. Dark background to avoid the
+  white-flash-before-paint that plagues naive Electron apps.
+- **Window state persistence.** Size, position, and maximized
+  state round-trip via `~/.agentchat/electron-window.json`
+  (debounced 400 ms so a drag doesn't hammer the disk).
+- **Splash + retry.** A transparent splash card shows while the
+  window warms up; the main load retries the URL for up to 5 s
+  so `install.sh` can open the shell and the server concurrently.
+- **Native dock/taskbar badge.** The web UI's new unread tracker
+  forwards the total count to the shell via a sandboxed preload
+  bridge (`window.agentchatShell.setBadge(n)`).
+- **Native notifications.** New messages in non-active rooms fire
+  an OS notification through the same bridge; clicking it focuses
+  the window.
+- **Keyboard shortcuts.** `Cmd/Ctrl+N` opens the create-room
+  dialog, `Cmd/Ctrl+Shift+J` opens join-by-ticket, `Cmd/Ctrl+1..9`
+  switches between the first nine rooms.
+- **`agentchat://join/<ticket>` custom protocol.** One-click
+  invite links. Single-instance lock so a second launch focuses
+  the first window and forwards the ticket.
+- **Hardened renderer.** `sandbox: true`, `contextIsolation: true`,
+  `nodeIntegration: false`; cross-origin navigations open in the
+  real browser instead of inside the shell.
+- **`install.sh` onboarding integration.** Offers to install
+  Electron (~130 MB) after the profile prompts; if accepted, the
+  post-onboarding "launch agentchat now?" step opens the native
+  shell instead of the browser. Opt out with `AGENTCHAT_ELECTRON=0`.
+
+Tests: +8 unit tests asserting the main/preload bundles parse,
+every IPC channel the preload sends is handled in main, renderer
+hardening flags are present, the custom protocol is registered,
+and `writeElectronShellFiles()` materialises both files. Full
+Electron launch behaviour is covered by manual smoke tests —
+spawning a display-requiring GUI from vitest isn't meaningful.
+
 ## 0.7.2 — 2026-04-21
 
 Per-user visibility: multi-agent / multi-repo session grouping + profile page.
