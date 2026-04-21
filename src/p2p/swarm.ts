@@ -24,16 +24,29 @@ async function getHyperswarm(): Promise<any> {
  *   - on each connection, starts a length-prefixed CBOR framer
  *   - emits 'envelope' events addressed to the right room
  */
+export interface SwarmOptions {
+  /** Optional Hyperswarm bootstrap list for tests against a local DHT. */
+  bootstrap?: Array<{ host: string; port: number }>;
+}
+
 export class Swarm extends EventEmitter {
   private swarm: SwarmLike | null = null;
   private connections: Set<any> = new Set();
   private parsers: Map<any, FrameParser> = new Map();
   private topics: Set<string> = new Set();
+  private readonly opts: SwarmOptions;
+
+  constructor(opts: SwarmOptions = {}) {
+    super();
+    this.opts = opts;
+  }
 
   async start(): Promise<void> {
     if (this.swarm) return;
     const Ctor = await getHyperswarm();
-    this.swarm = new Ctor() as SwarmLike;
+    this.swarm = new Ctor(
+      this.opts.bootstrap ? { bootstrap: this.opts.bootstrap } : {},
+    ) as SwarmLike;
     this.swarm.on('connection', (conn: any, info: any) => this.onConnection(conn, info));
   }
 

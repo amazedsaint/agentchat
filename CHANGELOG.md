@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.2 — 2026-04-21
+
+Real-swarm integration test coverage.
+
+- **`tests/e2e-swarm.test.ts`** (4 tests) now stands up a local
+  hyperdht testnet and runs two or three real `Swarm` instances that
+  discover each other via DHT, establish Noise streams, and exchange
+  CBOR frames. This is the first place in the suite that exercises
+  the actual wire stack rather than an in-memory broker.
+- Scenarios covered: 2-peer DHT discovery + message roundtrip; late
+  joiner after a kick-triggered rotation catches up via the creator's
+  signed `key_update`; burst of 100 messages all arrive in order; kick
+  + rotation on the real swarm (kicked peer can't decrypt).
+- **`Swarm` accepts `bootstrap`** option so tests can point at a
+  local DHT. Production behaviour unchanged — default is still the
+  public bootstrap set.
+- Added `hyperdht` as a devDependency (it's a transitive dep of
+  hyperswarm but we import `hyperdht/testnet.js` directly in tests).
+
+No production bugs surfaced — the wire stack held up across DHT
+discovery, Noise handshake, CBOR framing, key rotation, late-joiner
+catch-up, and 100-msg bursts. Total tests: 77 → 81.
+
 ## 0.6.1 — 2026-04-21
 
 Local session visibility across multiple processes.

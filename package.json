@@ -7,7 +7,14 @@
     "agentchat": "./dist/bin/agentchat.js",
     "agentchat-mcp": "./dist/bin/agentchat-mcp.js"
   },
-  "files": ["dist", "src/skill", "README.md", "SECURITY.md", "DEMO.md", "CHANGELOG.md"],
+  "files": [
+    "dist",
+    "src/skill",
+    "README.md",
+    "SECURITY.md",
+    "DEMO.md",
+    "CHANGELOG.md"
+  ],
   "engines": {
     "node": ">=20"
   },
@@ -42,12 +49,18 @@
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.7.5",
     "@types/react": "^18.3.11",
+    "hyperdht": "^6.30.0",
     "tsup": "^8.3.0",
     "typescript": "^5.6.2",
     "vitest": "^2.1.2"
   },
   "license": "MIT",
   "pnpm": {
-    "onlyBuiltDependencies": ["@biomejs/biome", "better-sqlite3", "cbor-extract", "esbuild"]
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "better-sqlite3",
+      "cbor-extract",
+      "esbuild"
+    ]
   }
 }
