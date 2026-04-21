@@ -5,3 +5,4 @@ dist
 .agentchat
 coverage
 .vitest-cache
+.claude/
