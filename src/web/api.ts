@@ -162,6 +162,58 @@ export async function handleApi(
     return respond(res, 200, { rooms: [...manager.rooms.values()].map(roomWire) });
   }
 
+  const profileMatch = /^\/api\/profile\/([0-9a-fA-F]{64})$/.exec(path);
+  if (profileMatch && method === 'GET') {
+    const pubkeyHex = profileMatch[1].toLowerCase();
+    const selfHex = bytesToHex(manager.identity.publicKey);
+    const isSelf = pubkeyHex === selfHex;
+
+    // Collect the target's member-info from every room we share with them.
+    const profileFromRooms: {
+      nickname: string;
+      bio: string;
+      client: string;
+      kind: ReturnType<typeof clientKind>;
+    } = { nickname: '', bio: '', client: '', kind: 'unknown' };
+    const sharedRooms: Array<{ id: string; name: string }> = [];
+    for (const room of manager.rooms.values()) {
+      for (const m of room.memberList()) {
+        if (bytesToHex(m.pubkey) !== pubkeyHex) continue;
+        sharedRooms.push({ id: room.idHex, name: room.name });
+        // Prefer non-empty fields from whichever room has them.
+        if (m.nickname && !profileFromRooms.nickname) profileFromRooms.nickname = m.nickname;
+        if (m.bio && !profileFromRooms.bio) profileFromRooms.bio = m.bio;
+        if (m.client && !profileFromRooms.client) {
+          profileFromRooms.client = m.client;
+          profileFromRooms.kind = clientKind(m.client);
+        }
+      }
+    }
+    // For self, fall back to our own live state.
+    if (isSelf) {
+      if (!profileFromRooms.nickname) profileFromRooms.nickname = manager.getNickname();
+      if (!profileFromRooms.bio) profileFromRooms.bio = manager.getBio();
+    }
+    if (!profileFromRooms.nickname && sharedRooms.length === 0) {
+      return respond(res, 404, { error: 'unknown pubkey' });
+    }
+
+    const payload: any = {
+      pubkey: pubkeyHex,
+      is_self: isSelf,
+      nickname: profileFromRooms.nickname,
+      bio: profileFromRooms.bio,
+      client: profileFromRooms.client,
+      kind: profileFromRooms.kind,
+      shared_rooms: sharedRooms,
+    };
+    if (isSelf) {
+      const cutoff = Date.now() - 90_000;
+      payload.sessions = repo.listActiveSessions(cutoff);
+    }
+    return respond(res, 200, payload);
+  }
+
   if (path === '/api/sessions' && method === 'GET') {
     // 90s stale window = 3× the 30s heartbeat. Same constant as the MCP
     // tool; any dead sessions are GC'd on the read.

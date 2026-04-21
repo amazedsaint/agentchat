@@ -73,7 +73,10 @@ function migrate(db: DB): void {
       client TEXT NOT NULL,           -- e.g. "claude-code", "codex-cli", "web", "tui"
       kind TEXT NOT NULL DEFAULT '',  -- "agent" | "human" | "unknown"
       started_at INTEGER NOT NULL,
-      last_seen INTEGER NOT NULL
+      last_seen INTEGER NOT NULL,
+      cwd TEXT NOT NULL DEFAULT '',
+      repo_room_id TEXT NOT NULL DEFAULT '',
+      repo_name TEXT NOT NULL DEFAULT ''
     );
     CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen);
 
@@ -130,6 +133,18 @@ function migrate(db: DB): void {
   }
   if (!memberCols.some((c) => c.name === 'bio')) {
     db.exec("ALTER TABLE members ADD COLUMN bio TEXT NOT NULL DEFAULT ''");
+  }
+
+  const sessionCols = db.prepare('PRAGMA table_info(sessions)').all() as Array<{
+    name: string;
+  }>;
+  if (sessionCols.length > 0) {
+    // sessions table exists (pre-0.7.2 schema); add new columns idempotently.
+    for (const col of ['cwd', 'repo_room_id', 'repo_name']) {
+      if (!sessionCols.some((c) => c.name === col)) {
+        db.exec(`ALTER TABLE sessions ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+      }
+    }
   }
   const roomCols = db.prepare('PRAGMA table_info(rooms)').all() as Array<{ name: string }>;
   if (!roomCols.some((c) => c.name === 'admission_mode')) {

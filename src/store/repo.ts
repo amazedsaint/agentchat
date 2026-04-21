@@ -599,18 +599,36 @@ export class Repo {
     kind: string;
     started_at: number;
     last_seen: number;
+    cwd?: string;
+    repo_room_id?: string;
+    repo_name?: string;
   }): void {
     this.db
       .prepare(
-        `INSERT INTO sessions (id, pid, client, kind, started_at, last_seen)
-         VALUES (@id, @pid, @client, @kind, @started_at, @last_seen)
+        `INSERT INTO sessions (id, pid, client, kind, started_at, last_seen, cwd, repo_room_id, repo_name)
+         VALUES (@id, @pid, @client, @kind, @started_at, @last_seen, @cwd, @repo_room_id, @repo_name)
          ON CONFLICT(id) DO UPDATE SET
            pid=excluded.pid,
            client=excluded.client,
            kind=excluded.kind,
-           last_seen=excluded.last_seen`,
+           last_seen=excluded.last_seen,
+           cwd=excluded.cwd,
+           repo_room_id=excluded.repo_room_id,
+           repo_name=excluded.repo_name`,
       )
-      .run(s);
+      .run({
+        ...s,
+        cwd: s.cwd || '',
+        repo_room_id: s.repo_room_id || '',
+        repo_name: s.repo_name || '',
+      });
+  }
+
+  /** Update only the repo fields of an existing session row (post-auto-join). */
+  setSessionRepo(id: string, repo_room_id: string, repo_name: string): void {
+    this.db
+      .prepare('UPDATE sessions SET repo_room_id = ?, repo_name = ? WHERE id = ?')
+      .run(repo_room_id, repo_name, id);
   }
 
   touchSession(id: string, last_seen: number): void {

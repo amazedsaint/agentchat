@@ -25,11 +25,12 @@ function detectClient(): string {
  */
 export function registerSession(
   repo: Repo,
-  opts: { client: string },
-): { id: string; cleanup: () => void } {
+  opts: { client: string; cwd?: string },
+): { id: string; cleanup: () => void; tagRepo: (roomId: string, roomName: string) => void } {
   const id = randomUUID();
   const client = opts.client || 'unknown';
   const now = Date.now();
+  const cwd = opts.cwd ?? process.cwd();
   repo.upsertSession({
     id,
     pid: process.pid,
@@ -37,6 +38,7 @@ export function registerSession(
     kind: clientKind(client),
     started_at: now,
     last_seen: now,
+    cwd,
   });
   const hb = setInterval(() => {
     try {
@@ -54,6 +56,13 @@ export function registerSession(
       clearInterval(hb);
       try {
         repo.removeSession(id);
+      } catch {
+        /* ignore */
+      }
+    },
+    tagRepo: (roomId, roomName) => {
+      try {
+        repo.setSessionRepo(id, roomId, roomName);
       } catch {
         /* ignore */
       }
@@ -138,7 +147,7 @@ export async function runStdioServer(opts: { web?: boolean } = {}): Promise<void
   const { server, manager, repo, db } = await buildContextAndServer();
   const session = registerSession(repo, { client: detectClient() });
   registerShutdown(db, manager, session.cleanup);
-  await maybeJoinRepoRoom(manager);
+  await maybeJoinRepoRoom(manager, session);
   const transport = new StdioServerTransport();
   await server.connect(transport);
   if (opts.web) await launchWebSidecar(manager, repo);
@@ -153,18 +162,25 @@ export async function runStdioServer(opts: { web?: boolean } = {}): Promise<void
  * on first join — anyone who knows the repo URL can derive the same
  * room id and join. For private coordination prefer a ticket-based room.
  */
-async function maybeJoinRepoRoom(manager: RoomManager): Promise<void> {
+async function maybeJoinRepoRoom(
+  manager: RoomManager,
+  session?: { tagRepo: (roomId: string, roomName: string) => void },
+): Promise<void> {
   if (process.env.AGENTCHAT_NO_REPO_ROOM === '1') return;
   const { detectRepoRoom } = await import('./repo-detect.js');
   const hit = detectRepoRoom();
   if (!hit) return;
   try {
-    const alreadyHad = manager.rooms.has(
-      Buffer.from(
-        (await import('../p2p/crypto.js')).deriveRoomId(hit.roomName, hit.rootSecret),
-      ).toString('hex'),
+    const roomIdBytes = (await import('../p2p/crypto.js')).deriveRoomId(
+      hit.roomName,
+      hit.rootSecret,
     );
+    const roomIdHex = Buffer.from(roomIdBytes).toString('hex');
+    const alreadyHad = manager.rooms.has(roomIdHex);
     await manager.joinOrCreateLeaderlessRoom(hit.roomName, hit.rootSecret, hit.leaderlessCreator);
+    // Tag the session with the repo it's working in so the web UI can group
+    // "My sessions" by repo. Safe if session is undefined.
+    session?.tagRepo(roomIdHex, hit.roomName);
     if (!alreadyHad) {
       process.stderr.write(
         `[agentchat] auto-joined ${hit.roomName} (derived from ${hit.canonical}).
@@ -244,7 +260,7 @@ export async function runHttpServer(host: string, port: number): Promise<void> {
   const { manager, repo, db } = await buildContextAndServer();
   const session = registerSession(repo, { client: 'http-mcp' });
   registerShutdown(db, manager, session.cleanup);
-  await maybeJoinRepoRoom(manager);
+  await maybeJoinRepoRoom(manager, session);
   startHttpMcp({
     host,
     port,

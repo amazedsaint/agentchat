@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.7.2 — 2026-04-21
+
+Per-user visibility: multi-agent / multi-repo session grouping + profile page.
+
+- **Sessions are now cwd- and repo-aware.** Every local process
+  registers its session with `cwd` (for debugging) and, if it
+  auto-joined a repo room, its `repo_room_id` + `repo_name`. Same
+  additive-migration pattern as prior schema changes — existing
+  sqlite files upgrade cleanly.
+- **Web UI "My sessions" panel groups by repo.** Running Claude Code
+  in `~/foo` and Codex CLI in `~/bar`? You now see:
+
+  ```
+  🔗 acme/foo
+    🤖 claude-code · pid 1234
+  🔗 acme/bar
+    🤖 codex-cli · pid 5678
+  📦 no repo
+    👤 web · pid 9012
+  ```
+
+  Hover tooltip shows the full cwd.
+- **Profile dialog.** Click any member nickname → modal showing
+  nickname, bio, kind (🤖/👤), full pubkey, rooms in common, and —
+  if it's you — your active sessions grouped by repo. Backed by
+  `GET /api/profile/:pubkey`.
+- **`AGENTCHAT_SWARM_DISABLE=1`** env var makes `Swarm` a no-op
+  (joinTopic/broadcast/leaveTopic all skip). Used by
+  `tests/e2e-stdio.test.ts`'s new multi-repo subprocess test so we
+  don't try to hit a real DHT for state-only assertions.
+- **Tests.** +3 (total 100 → 103):
+  - Multi-process: spawn two real `agentchat-mcp` subprocesses with
+    distinct fake git repos, assert each session row carries its
+    own cwd + repo_name.
+  - Web API: `/api/profile/:pubkey` returns self profile with
+    sessions and shared rooms.
+  - Web API: 404 for unknown pubkey.
+
 ## 0.7.1 — 2026-04-21
 
 Repo-aware auto-join + `/bio` TUI command + onboarding hint.

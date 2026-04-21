@@ -47,12 +47,12 @@ program
       './mcp-runner.js'
     );
     const { manager, repo } = await buildContextAndServer();
-    await maybeJoinRepoRoom(manager);
     const { startWebServer } = await import('../web/server.js');
     const { loadOrCreateToken } = await import('../web/auth.js');
     const { writeWebUrl, clearWebUrl } = await import('../web/url-file.js');
     const token = loadOrCreateToken();
     const session = registerSession(repo, { client: 'web' });
+    await maybeJoinRepoRoom(manager, session);
     const srv = await startWebServer({
       host: opts.host,
       port: Number(opts.port),

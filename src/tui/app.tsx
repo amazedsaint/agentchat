@@ -768,7 +768,7 @@ export async function startTui(opts: { daemonUrl?: string }): Promise<void> {
   // Register as a local session so other local clients can see us.
   const { registerSession, maybeJoinRepoRoom } = await import('../bin/mcp-runner.js');
   const session = registerSession(repo, { client: 'tui' });
-  await maybeJoinRepoRoom(manager);
+  await maybeJoinRepoRoom(manager, session);
   let ran = false;
   const cleanup = () => {
     if (ran) return;

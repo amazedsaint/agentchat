@@ -272,6 +272,57 @@ describe('Web server', () => {
     }
   });
 
+  it('/api/profile/:pubkey returns self profile with sessions', async () => {
+    const { srv, manager, close } = await bootServer();
+    try {
+      const auth = {
+        Authorization: 'Bearer test-token-abcdef1234567890',
+        'content-type': 'application/json',
+      };
+      // Register a session so /api/profile returns something under my pubkey.
+      const { registerSession } = await import('../src/bin/mcp-runner.js');
+      const session = registerSession(manager.repo, { client: 'claude-code', cwd: '/tmp/demo' });
+      session.tagRepo('deadbeef'.repeat(8), '#acme/demo');
+
+      await req(`${srv.url}/api/rooms`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({ name: '#profile-test' }),
+      });
+
+      const me = await req(`${srv.url}/api/me`, { headers: auth });
+      const mePub = me.body.pubkey;
+
+      const profile = await req(`${srv.url}/api/profile/${mePub}`, { headers: auth });
+      expect(profile.status).toBe(200);
+      expect(profile.body.is_self).toBe(true);
+      expect(profile.body.shared_rooms.length).toBe(1);
+      expect(profile.body.shared_rooms[0].name).toBe('#profile-test');
+      expect(Array.isArray(profile.body.sessions)).toBe(true);
+      const hasRepo = profile.body.sessions.some((s: any) => s.repo_name === '#acme/demo');
+      expect(hasRepo).toBe(true);
+
+      session.cleanup();
+    } finally {
+      await srv.close();
+      await manager.stop();
+      close();
+    }
+  });
+
+  it('/api/profile/:pubkey returns 404 for unknown pubkey', async () => {
+    const { srv, manager, close } = await bootServer();
+    try {
+      const auth = { Authorization: 'Bearer test-token-abcdef1234567890' };
+      const res = await req(`${srv.url}/api/profile/${'00'.repeat(32)}`, { headers: auth });
+      expect(res.status).toBe(404);
+    } finally {
+      await srv.close();
+      await manager.stop();
+      close();
+    }
+  });
+
   it('rejects WS upgrade with a disallowed Origin (CSWSH defense)', async () => {
     const { srv, manager, close } = await bootServer();
     try {

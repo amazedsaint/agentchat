@@ -411,6 +411,30 @@ export const UI_HTML = `<!doctype html>
     grid-column: 2; font-size: 11.5px; color: var(--text-muted);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  .sessions-group-header {
+    font-size: 11px; color: var(--text-muted);
+    padding: 8px 8px 4px; text-transform: none; font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .member-row .nick { cursor: pointer; }
+  .member-row .nick:hover { color: var(--accent); }
+  .session-row .nick { cursor: default; }
+  .session-row .nick:hover { color: inherit; }
+  #profile-dialog .profile-pubkey {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px; color: var(--text-muted);
+    word-break: break-all;
+  }
+  #profile-dialog .profile-section {
+    margin: 14px 0 6px; font-size: 12px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  #profile-dialog .profile-list {
+    list-style: none; padding: 0; margin: 0;
+  }
+  #profile-dialog .profile-list li {
+    padding: 4px 0; font-size: 13px;
+  }
   .member-row .nick {
     flex: 1; min-width: 0; font-size: 13px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -732,6 +756,16 @@ export const UI_HTML = `<!doctype html>
   </div>
 </dialog>
 
+<dialog id="profile-dialog">
+  <h2 id="profile-name">Profile</h2>
+  <div class="profile-pubkey" id="profile-pubkey"></div>
+  <div id="profile-bio" style="margin: 12px 0;"></div>
+  <div id="profile-body"></div>
+  <div class="actions">
+    <button type="button" class="btn primary" value="cancel">Close</button>
+  </div>
+</dialog>
+
 <dialog id="onboarding-dialog">
   <h2>Welcome! Set up your profile</h2>
   <p style="color:var(--text-dim);margin:0 0 16px;font-size:13px;">
@@ -970,6 +1004,69 @@ export const UI_HTML = `<!doctype html>
     else await refreshActiveRoom();
   }
 
+  // ------- profile dialog -------
+  async function openProfile(pubkey) {
+    const body = $('profile-body');
+    const bio = $('profile-bio');
+    body.textContent = ''; bio.textContent = '';
+    $('profile-name').textContent = '…';
+    $('profile-pubkey').textContent = pubkey;
+    openDialog('profile-dialog');
+    let p;
+    try {
+      p = await api('/api/profile/' + pubkey);
+    } catch (e) {
+      $('profile-name').textContent = 'Unknown';
+      const err = document.createElement('div'); err.textContent = 'Could not load profile: ' + e.message;
+      body.appendChild(err);
+      return;
+    }
+    const [badge] = kindBadge(p.kind);
+    $('profile-name').textContent = (badge ? badge + ' ' : '') + '@' + (p.nickname || pubkey.slice(0, 8)) + (p.is_self ? ' (you)' : '');
+    if (p.bio) { bio.textContent = p.bio; bio.style.color = 'var(--text)'; }
+    if (p.client) {
+      const line = document.createElement('div');
+      line.style.fontSize = '12px'; line.style.color = 'var(--text-muted)';
+      line.textContent = 'client: ' + p.client;
+      body.appendChild(line);
+    }
+    // Rooms we share with them.
+    if (p.shared_rooms && p.shared_rooms.length) {
+      const h = document.createElement('div'); h.className = 'profile-section';
+      h.textContent = 'Rooms in common (' + p.shared_rooms.length + ')';
+      body.appendChild(h);
+      const ul = document.createElement('ul'); ul.className = 'profile-list';
+      for (const r of p.shared_rooms) {
+        const li = document.createElement('li'); li.textContent = r.name;
+        ul.appendChild(li);
+      }
+      body.appendChild(ul);
+    }
+    // Self-only: active sessions grouped by repo.
+    if (p.is_self && p.sessions && p.sessions.length) {
+      const h = document.createElement('div'); h.className = 'profile-section';
+      h.textContent = 'My sessions (' + p.sessions.length + ')';
+      body.appendChild(h);
+      const groups = new Map();
+      for (const s of p.sessions) {
+        const k = s.repo_name || '';
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(s);
+      }
+      const ul = document.createElement('ul'); ul.className = 'profile-list';
+      for (const [repoName, sess] of [...groups.entries()].sort()) {
+        for (const s of sess) {
+          const li = document.createElement('li');
+          const emoji = s.kind === 'agent' ? '\u{1F916}' : s.kind === 'human' ? '\u{1F464}' : '\u{00B7}';
+          const repoPrefix = repoName ? '\u{1F517} ' + repoName + ' · ' : '';
+          li.textContent = emoji + ' ' + repoPrefix + s.client + ' (pid ' + s.pid + ')';
+          ul.appendChild(li);
+        }
+      }
+      body.appendChild(ul);
+    }
+  }
+
   // ------- sessions -------
   async function refreshSessions() {
     try {
@@ -989,16 +1086,40 @@ export const UI_HTML = `<!doctype html>
       box.appendChild(hint);
       return;
     }
+    // Group sessions by repo_name. Sessions with no repo_name fall under
+    // "(no repo)" so the user can still see them.
+    const groups = new Map();
     for (const s of sessions) {
-      const row = document.createElement('div'); row.className = 'member-row';
-      const av = document.createElement('div'); av.className = 'mini-avatar';
-      const emoji = s.kind === 'agent' ? '\u{1F916}' : s.kind === 'human' ? '\u{1F464}' : '\u{00B7}';
-      av.textContent = emoji;
-      const nick = document.createElement('span'); nick.className = 'nick';
-      nick.textContent = s.client + ' · pid ' + s.pid;
-      nick.title = 'started ' + new Date(s.started_at).toLocaleTimeString();
-      row.appendChild(av); row.appendChild(nick);
-      box.appendChild(row);
+      const key = s.repo_name || '';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
+    }
+    const groupKeys = [...groups.keys()].sort();
+    for (const repoName of groupKeys) {
+      if (repoName) {
+        const h = document.createElement('div');
+        h.className = 'sessions-group-header';
+        h.textContent = '\u{1F517} ' + repoName;
+        box.appendChild(h);
+      } else if (groups.size > 1) {
+        const h = document.createElement('div');
+        h.className = 'sessions-group-header';
+        h.textContent = '\u{1F4E6} no repo';
+        box.appendChild(h);
+      }
+      for (const s of groups.get(repoName)) {
+        const row = document.createElement('div'); row.className = 'member-row session-row';
+        const av = document.createElement('div'); av.className = 'mini-avatar';
+        const emoji = s.kind === 'agent' ? '\u{1F916}' : s.kind === 'human' ? '\u{1F464}' : '\u{00B7}';
+        av.textContent = emoji;
+        const nick = document.createElement('span'); nick.className = 'nick';
+        nick.textContent = s.client + ' · pid ' + s.pid;
+        const titleLines = ['started ' + new Date(s.started_at).toLocaleTimeString()];
+        if (s.cwd) titleLines.push('cwd: ' + s.cwd);
+        nick.title = titleLines.join('\n');
+        row.appendChild(av); row.appendChild(nick);
+        box.appendChild(row);
+      }
     }
   }
 
@@ -1243,6 +1364,7 @@ export const UI_HTML = `<!doctype html>
       if (badgeTitle) titleParts.push(badgeTitle + (m.client ? ' (' + m.client + ')' : ''));
       if (m.bio) titleParts.push(m.bio);
       if (titleParts.length) nick.title = titleParts.join('\n');
+      nick.addEventListener('click', () => openProfile(m.pubkey));
       row.appendChild(av); row.appendChild(nick);
       if (m.bio) {
         const bio = document.createElement('span');
