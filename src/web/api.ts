@@ -216,9 +216,19 @@ export async function handleApi(
 
   if (path === '/api/sessions' && method === 'GET') {
     // 90s stale window = 3× the 30s heartbeat. Same constant as the MCP
-    // tool; any dead sessions are GC'd on the read.
+    // tool; any dead sessions are GC'd on the read. Remote sessions come
+    // from the cross-device presence layer (other machines on the same
+    // identity) and carry a `machine_id` + `machine_label`.
     const cutoff = Date.now() - 90_000;
-    return respond(res, 200, { sessions: repo.listActiveSessions(cutoff) });
+    const localMachineId = loadConfig().machine_id || '';
+    const local = repo.listActiveSessions(cutoff).map((s) => ({
+      ...s,
+      machine_id: localMachineId,
+      machine_label: localMachineId ? localMachineId.slice(0, 8) : '',
+      is_local: true,
+    }));
+    const remote = manager.getRemoteSessions().map((s) => ({ ...s, is_local: false }));
+    return respond(res, 200, { sessions: [...local, ...remote] });
   }
 
   if (path === '/api/rooms' && method === 'POST') {

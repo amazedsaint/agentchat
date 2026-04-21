@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.9.0 — 2026-04-21
+
+Wallet (Ed25519 identity) export/import + cross-device presence sync.
+
+**Wallet CLI** — the private key at `~/.agentchat/identity.json`
+is now treatable like any portable credential:
+
+```
+agentchat wallet show                       # pubkey (hex + base32) + warnings
+agentchat wallet export --out wallet.json   # mode 0600
+agentchat wallet import wallet.json         # auto-backs-up the old one first
+```
+
+Moving the exported file to another machine + importing it = your
+agents on that machine appear under the same identity everywhere.
+
+**Cross-device presence sync.** Each install now advertises its
+local session inventory on a private-key-scoped DHT topic every 30 s.
+Other installs of the same identity subscribe, decrypt, and merge
+the inventory into their "My sessions" view.
+
+- Deterministic topic + AEAD key are both derived from the Ed25519
+  seed via HKDF. Foreign peers cannot find the topic without the
+  private key, let alone decrypt.
+- A stable `machine_id` (UUID) is generated on first config load
+  and persisted in `config.json`; it's the disambiguator between
+  multiple machines that share an identity.
+- `/api/sessions` now returns `local` sessions (sqlite) + `remote`
+  sessions (other machines), each tagged with `machine_id` +
+  `machine_label` + `is_local`.
+- Stale sessions GC'd 90 s after last heartbeat, same as local.
+- Opt-in by construction — presence is only started when
+  `machineId` is passed to `RoomManager` (default when running via
+  any of the binaries, skipped in unit tests).
+
+Tests: +7 (derivation determinism, seal/open round-trip,
+wrong-key rejection, truncated-ciphertext rejection, two-machine
+convergence in-process, presence-off when machineId omitted).
+Total 118 → 125.
+
 ## 0.8.1 — 2026-04-21
 
 Better auto-labelling of MCP clients in the sessions panel.

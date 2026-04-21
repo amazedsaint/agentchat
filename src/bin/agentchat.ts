@@ -1,7 +1,14 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { Command } from 'commander';
-import { agentchatDir, loadConfig, loadOrCreateIdentity, saveConfig } from '../p2p/identity.js';
+import { base32Encode } from '../p2p/base32.js';
+import {
+  agentchatDir,
+  identityPath,
+  loadConfig,
+  loadOrCreateIdentity,
+  saveConfig,
+} from '../p2p/identity.js';
 import { openDatabase } from '../store/db.js';
 import { Repo } from '../store/repo.js';
 import { buildContextAndServer, runHttpServer, runStdioServer } from './mcp-runner.js';
@@ -101,6 +108,110 @@ program
     const { startTui } = await import('../tui/app.js');
     await startTui({ daemonUrl: opts.daemon });
   });
+
+program
+  .command('wallet')
+  .description(
+    'Manage your Ed25519 identity (aka wallet). Use this to move your agentchat identity between machines so your agents all show up as the same user.',
+  )
+  .addCommand(
+    new Command('show').description('Print your public key + the on-disk path').action(() => {
+      const id = loadOrCreateIdentity();
+      const hex = Buffer.from(id.publicKey).toString('hex');
+      const b32 = base32Encode(id.publicKey);
+      process.stdout.write(`pubkey (hex):    ${hex}\n`);
+      process.stdout.write(`pubkey (base32): ${b32}\n`);
+      process.stdout.write(`identity file:   ${identityPath()}\n`);
+      process.stdout.write(
+        '\nThe private key in that file is secret. Treat it like an SSH private key:\n' +
+          '  - 0600 permissions (already enforced)\n' +
+          '  - never commit to git\n' +
+          '  - to use the same identity on another machine, run\n' +
+          '      agentchat wallet export --out /tmp/agentchat-wallet.json\n' +
+          '    copy the file to the other machine (scp / secure channel), then\n' +
+          '      agentchat wallet import /tmp/agentchat-wallet.json\n',
+      );
+    }),
+  )
+  .addCommand(
+    new Command('export')
+      .description('Export your identity.json to a file or stdout')
+      .option('--out <path>', 'where to write (default: stdout)')
+      .action((opts) => {
+        const src = identityPath();
+        if (!existsSync(src)) {
+          console.error('No identity yet — run `agentchat` once to create one.');
+          process.exit(2);
+        }
+        const raw = readFileSync(src, 'utf8');
+        if (opts.out) {
+          writeFileSync(opts.out, raw);
+          try {
+            chmodSync(opts.out, 0o600);
+          } catch {
+            /* best-effort */
+          }
+          process.stderr.write(
+            `[agentchat] exported to ${opts.out} (mode 0600). TREAT THIS FILE AS SECRET.\n`,
+          );
+        } else {
+          process.stdout.write(raw);
+        }
+      }),
+  )
+  .addCommand(
+    new Command('import')
+      .description('Import an identity.json from another machine (overwrites the local one)')
+      .argument('<file>', 'path to the exported identity.json')
+      .option('-y, --yes', 'skip confirmation')
+      .action((file: string, opts) => {
+        if (!existsSync(file)) {
+          console.error(`File not found: ${file}`);
+          process.exit(2);
+        }
+        const incoming = readFileSync(file, 'utf8');
+        let parsed: any;
+        try {
+          parsed = JSON.parse(incoming);
+        } catch {
+          console.error('Not valid JSON.');
+          process.exit(2);
+        }
+        if (
+          typeof parsed !== 'object' ||
+          parsed.version !== 1 ||
+          typeof parsed.publicKey !== 'string' ||
+          typeof parsed.privateKey !== 'string'
+        ) {
+          console.error(
+            'Not an agentchat identity file (expected version=1 + publicKey + privateKey).',
+          );
+          process.exit(2);
+        }
+        const dest = identityPath();
+        if (existsSync(dest) && !opts.yes) {
+          // Backup first so an accidental import is recoverable.
+          const backup = `${dest}.backup-${Date.now()}`;
+          writeFileSync(backup, readFileSync(dest, 'utf8'));
+          try {
+            chmodSync(backup, 0o600);
+          } catch {
+            /* ignore */
+          }
+          process.stderr.write(`[agentchat] backed up existing identity to ${backup}\n`);
+        }
+        mkdirSync(dirname(dest), { recursive: true, mode: 0o700 });
+        writeFileSync(dest, incoming);
+        try {
+          chmodSync(dest, 0o600);
+        } catch {
+          /* ignore */
+        }
+        process.stderr.write(
+          '[agentchat] identity replaced. You are now the user whose key you imported.\n',
+        );
+      }),
+  );
 
 program
   .command('ticket')

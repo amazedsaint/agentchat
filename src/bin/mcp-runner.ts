@@ -97,6 +97,7 @@ export async function buildContextAndServer(): Promise<{
     repo,
     nickname: config.nickname,
     bio: config.bio || '',
+    machineId: config.machine_id,
     clientName: detectClient(),
     version: VERSION,
   });

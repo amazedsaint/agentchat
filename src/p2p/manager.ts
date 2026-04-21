@@ -2,8 +2,14 @@ import { EventEmitter } from 'node:events';
 import type { Repo } from '../store/repo.js';
 import { base32Decode, base32Encode } from './base32.js';
 import { blake3, concatBytes, deriveRoomId, randomKey } from './crypto.js';
-import type { Envelope } from './envelope.js';
+import { type Envelope, openEnvelope, sealEnvelope } from './envelope.js';
 import type { Identity } from './identity.js';
+import {
+  type PresencePayload,
+  type RemoteSession,
+  derivePresenceParams,
+  machineLabel,
+} from './presence.js';
 import { type AdmissionMode, Room } from './room.js';
 import { Swarm } from './swarm.js';
 import { decodeTicket } from './ticket.js';
@@ -15,6 +21,10 @@ export interface RoomManagerOptions {
   clientName: string;
   version: string;
   bio?: string;
+  /** Stable UUID for this machine — used by the presence layer to
+   * distinguish multiple agentchat installs that share the same Ed25519
+   * identity. If omitted, presence sync is disabled. */
+  machineId?: string;
   swarm?: Swarm;
 }
 
@@ -29,6 +39,21 @@ export class RoomManager extends EventEmitter {
   readonly swarm: Swarm;
   private started = false;
 
+  /** Presence-sync state. The topic is private-key-scoped so only the same
+   * identity's other installs can find it; foreign peers can't derive it
+   * without the private key. Null when machineId isn't set (presence
+   * disabled). */
+  private readonly presence: {
+    machineId: string;
+    topic: Uint8Array;
+    topicHex: string;
+    key: Uint8Array;
+    timer: NodeJS.Timeout | null;
+    /** Remote machines' latest sessions, keyed by machine_id. Purged when
+     * the remote's `ts` is older than 3× the broadcast interval. */
+    remote: Map<string, { ts: number; sessions: RemoteSession[] }>;
+  } | null;
+
   constructor(opts: RoomManagerOptions) {
     super();
     this.setMaxListeners(100);
@@ -40,8 +65,31 @@ export class RoomManager extends EventEmitter {
     this.bio = opts.bio || '';
     this.swarm = opts.swarm || new Swarm();
 
+    // Presence topic + key are derived from the Ed25519 seed. Only the
+    // same identity's other machines can find the topic + decrypt.
+    if (opts.machineId) {
+      const { topic, key } = derivePresenceParams(this.identity.privateKey);
+      this.presence = {
+        machineId: opts.machineId,
+        topic,
+        topicHex: Buffer.from(topic).toString('hex'),
+        key,
+        timer: null,
+        remote: new Map(),
+      };
+    } else {
+      this.presence = null;
+    }
+
     this.swarm.on('envelope', (env: Envelope) => {
       const key = Buffer.from(env.room).toString('hex');
+      // Presence envelopes ride the same wire but route to the presence
+      // sync handler, not a Room — they belong to a private-key-scoped
+      // topic that nobody outside this identity can derive.
+      if (this.presence && key === this.presence.topicHex && env.type === 'presence') {
+        this.handlePresenceEnvelope(env);
+        return;
+      }
       const room = this.rooms.get(key);
       if (!room) return;
       room.handleEnvelope(env);
@@ -103,6 +151,95 @@ export class RoomManager extends EventEmitter {
     await this.swarm.start();
     this.started = true;
     await Promise.all(this.repo.listRooms().map((r) => this.rehydrateRoom(r)));
+    await this.startPresence();
+  }
+
+  private async startPresence(): Promise<void> {
+    if (!this.presence) return;
+    await this.swarm.joinTopic(this.presence.topic);
+    // Broadcast immediately so peers that are already listening don't have
+    // to wait the full interval for our first snapshot.
+    this.broadcastPresence();
+    const INTERVAL_MS = 30_000;
+    this.presence.timer = setInterval(() => {
+      this.broadcastPresence();
+      this.gcRemoteSessions();
+    }, INTERVAL_MS);
+    this.presence.timer.unref?.();
+    this.swarm.on('connection', () => this.broadcastPresence());
+  }
+
+  private broadcastPresence(): void {
+    if (!this.presence) return;
+    const cutoff = Date.now() - 90_000;
+    const localSessions = this.repo.listActiveSessions(cutoff);
+    const inner: PresencePayload = {
+      v: 1,
+      machine_id: this.presence.machineId,
+      ts: Date.now(),
+      sessions: localSessions.map((s) => ({
+        id: s.id,
+        pid: s.pid,
+        client: s.client,
+        kind: s.kind,
+        cwd: s.cwd,
+        repo_name: s.repo_name,
+        repo_room_id: s.repo_room_id,
+        started_at: s.started_at,
+        last_seen: s.last_seen,
+      })),
+    };
+    try {
+      const env = sealEnvelope(
+        'presence',
+        this.presence.topic,
+        this.identity.publicKey,
+        this.identity.privateKey,
+        this.presence.key,
+        inner,
+      );
+      this.swarm.broadcast(env);
+    } catch {
+      /* best-effort — a missed broadcast just means the next one catches up */
+    }
+  }
+
+  private handlePresenceEnvelope(env: Envelope): void {
+    if (!this.presence) return;
+    // Any peer with our Ed25519 private key signs as our pubkey, so the
+    // `from` match alone doesn't distinguish local from remote. The
+    // machine_id INSIDE the payload is what differentiates installs.
+    const inner = openEnvelope<PresencePayload>(env, [this.presence.key]);
+    if (!inner || inner.v !== 1 || typeof inner.machine_id !== 'string') return;
+    if (!Array.isArray(inner.sessions)) return;
+    if (inner.machine_id === this.presence.machineId) return; // our own echo
+    const remoteSessions: RemoteSession[] = inner.sessions.map((s) => ({
+      ...s,
+      machine_id: inner.machine_id,
+      machine_label: machineLabel(inner.machine_id),
+    }));
+    this.presence.remote.set(inner.machine_id, {
+      ts: inner.ts,
+      sessions: remoteSessions,
+    });
+    this.emit('remote_sessions_updated');
+  }
+
+  private gcRemoteSessions(): void {
+    if (!this.presence) return;
+    const cutoff = Date.now() - 90_000;
+    for (const [mid, entry] of this.presence.remote) {
+      if (entry.ts < cutoff) this.presence.remote.delete(mid);
+    }
+  }
+
+  /** Flat list of sessions from every other machine running this identity. */
+  getRemoteSessions(): RemoteSession[] {
+    if (!this.presence) return [];
+    this.gcRemoteSessions();
+    const out: RemoteSession[] = [];
+    for (const entry of this.presence.remote.values()) out.push(...entry.sessions);
+    return out;
   }
 
   /**
@@ -181,6 +318,10 @@ export class RoomManager extends EventEmitter {
   }
 
   async stop(): Promise<void> {
+    if (this.presence?.timer) {
+      clearInterval(this.presence.timer);
+      this.presence.timer = null;
+    }
     await this.swarm.destroy();
     this.started = false;
   }

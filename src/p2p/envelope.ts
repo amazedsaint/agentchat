@@ -12,7 +12,8 @@ export type EnvelopeType =
   | 'note_put'
   | 'note_delete'
   | 'graph_assert'
-  | 'graph_retract';
+  | 'graph_retract'
+  | 'presence';
 
 export interface Envelope {
   v: 1;
@@ -100,6 +101,23 @@ export interface InnerGraphRetract {
   retracted_at: number;
 }
 
+export interface InnerPresence {
+  v: 1;
+  machine_id: string;
+  ts: number;
+  sessions: Array<{
+    id: string;
+    pid: number;
+    client: string;
+    kind: string;
+    cwd: string;
+    repo_name: string;
+    repo_room_id: string;
+    started_at: number;
+    last_seen: number;
+  }>;
+}
+
 export type Inner =
   | InnerHello
   | InnerMembers
@@ -111,6 +129,7 @@ export type Inner =
   | InnerNoteDelete
   | InnerGraphAssert
   | InnerGraphRetract
+  | InnerPresence
   | Record<string, never>;
 
 function signPayload(

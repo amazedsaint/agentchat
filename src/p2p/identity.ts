@@ -1,4 +1,4 @@
-import { KeyObject } from 'node:crypto';
+import { KeyObject, randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -16,6 +16,10 @@ export interface Config {
   nickname: string;
   /** Short human-readable bio shown next to the nickname in room UIs. */
   bio?: string;
+  /** Stable UUID for this install of agentchat, generated on first run.
+   * Used by the presence-sync layer to distinguish multiple machines that
+   * share the same Ed25519 identity. */
+  machine_id?: string;
   http?: { port?: number; host?: string };
 }
 
@@ -82,12 +86,21 @@ export function loadOrCreateIdentity(): Identity {
 
 export function loadConfig(): Config {
   const path = configPath();
+  let cfg: Config;
   if (!existsSync(path)) {
-    const cfg: Config = { nickname: 'agent' };
-    writeFileSync(path, JSON.stringify(cfg, null, 2));
-    return cfg;
+    cfg = { nickname: 'agent' };
+  } else {
+    cfg = JSON.parse(readFileSync(path, 'utf8')) as Config;
   }
-  return JSON.parse(readFileSync(path, 'utf8')) as Config;
+  // Ensure a stable machine_id on every load. The presence layer needs it
+  // to distinguish this install from other machines running the same
+  // identity, so we generate-and-persist the first time we see a config
+  // file without one.
+  if (!cfg.machine_id) {
+    cfg.machine_id = randomUUID();
+    writeFileSync(path, JSON.stringify(cfg, null, 2));
+  }
+  return cfg;
 }
 
 export function saveConfig(cfg: Config): void {

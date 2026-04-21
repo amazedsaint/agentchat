@@ -652,6 +652,9 @@ export class Repo {
     kind: string;
     started_at: number;
     last_seen: number;
+    cwd: string;
+    repo_room_id: string;
+    repo_name: string;
   }> {
     this.db.prepare('DELETE FROM sessions WHERE last_seen < ?').run(staleBeforeMs);
     return this.db.prepare('SELECT * FROM sessions ORDER BY started_at ASC').all() as any[];
