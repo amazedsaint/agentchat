@@ -128,6 +128,9 @@ function migrate(db: DB): void {
   if (!memberCols.some((c) => c.name === 'client')) {
     db.exec("ALTER TABLE members ADD COLUMN client TEXT NOT NULL DEFAULT ''");
   }
+  if (!memberCols.some((c) => c.name === 'bio')) {
+    db.exec("ALTER TABLE members ADD COLUMN bio TEXT NOT NULL DEFAULT ''");
+  }
   const roomCols = db.prepare('PRAGMA table_info(rooms)').all() as Array<{ name: string }>;
   if (!roomCols.some((c) => c.name === 'admission_mode')) {
     db.exec("ALTER TABLE rooms ADD COLUMN admission_mode TEXT NOT NULL DEFAULT 'open'");

@@ -30,6 +30,8 @@ export interface InnerHello {
   client: string;
   version: string;
   x25519_pub: Uint8Array;
+  /** Optional short bio. Additive — older clients ignore unknown fields. */
+  bio?: string;
 }
 
 export interface InnerMembers {

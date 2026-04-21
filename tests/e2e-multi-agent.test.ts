@@ -504,6 +504,55 @@ describe('E2E multi-agent workflows', () => {
     bob.close();
   });
 
+  it('bio propagates via hello and appears on peer member rows', async () => {
+    const net = new SwarmNet();
+    const identityA = makeIdentity();
+    const identityB = makeIdentity();
+    const a = tmpDb();
+    const b = tmpDb();
+    const alice = {
+      name: 'alice',
+      manager: new RoomManager({
+        identity: identityA,
+        repo: a.repo,
+        nickname: 'alice',
+        bio: 'Payments platform team',
+        clientName: 'tui',
+        version: '0',
+        swarm: new TestSwarm(net),
+      }),
+      repo: a.repo,
+      close: a.close,
+      pubkeyHex: Buffer.from(identityA.publicKey).toString('hex'),
+    };
+    const bob = await makeAgent('bob', net);
+    // Replace bob's identity-less manager with one that has a bio.
+    void identityB;
+
+    await alice.manager.start();
+
+    const create = await call(alice, 'chat_create_room', { name: '#biotest' });
+    const ticket = create.structuredContent.ticket;
+    await call(bob, 'chat_join_room', { ticket });
+    await settle(80);
+
+    const who = await call(bob, 'chat_list_members', { room: '#biotest' });
+    const aliceEntry = who.structuredContent.members.find((m: any) => m.pubkey === alice.pubkeyHex);
+    expect(aliceEntry?.bio).toBe('Payments platform team');
+
+    // Alice updates her bio and re-hellos; bob picks it up.
+    alice.manager.setBio('Now working on notifications');
+    await settle(80);
+    const who2 = await call(bob, 'chat_list_members', { room: '#biotest' });
+    const aliceEntry2 = who2.structuredContent.members.find(
+      (m: any) => m.pubkey === alice.pubkeyHex,
+    );
+    expect(aliceEntry2?.bio).toBe('Now working on notifications');
+
+    alice.close();
+    bob.close();
+  });
+
   it('member list exposes client + derived kind (agent vs human)', async () => {
     const net = new SwarmNet();
     // Two agents with different clientName values — one looks like an agent,

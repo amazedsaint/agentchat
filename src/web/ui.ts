@@ -407,6 +407,10 @@ export const UI_HTML = `<!doctype html>
     font-size: 11px; font-weight: 600;
     flex-shrink: 0;
   }
+  .member-row .member-bio {
+    grid-column: 2; font-size: 11.5px; color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .member-row .nick {
     flex: 1; min-width: 0; font-size: 13px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -728,6 +732,26 @@ export const UI_HTML = `<!doctype html>
   </div>
 </dialog>
 
+<dialog id="onboarding-dialog">
+  <h2>Welcome! Set up your profile</h2>
+  <p style="color:var(--text-dim);margin:0 0 16px;font-size:13px;">
+    Other room members see your nickname and bio. You can change these anytime.
+  </p>
+  <div class="field">
+    <label for="onb-nickname">Display name</label>
+    <input id="onb-nickname" type="text" maxlength="32" autocomplete="off" spellcheck="false">
+  </div>
+  <div class="field">
+    <label for="onb-bio">Short bio <span style="color:var(--text-muted);font-weight:400;">(optional, max 200 chars)</span></label>
+    <textarea id="onb-bio" rows="3" maxlength="200" spellcheck="true"
+      placeholder="e.g. Backend engineer working on payments"></textarea>
+  </div>
+  <div class="actions">
+    <button type="button" class="btn" value="cancel" id="onb-skip">Skip</button>
+    <button type="button" class="btn primary" id="onb-save">Save</button>
+  </div>
+</dialog>
+
 <dialog id="join-dialog">
   <h2>Join room</h2>
   <div class="field">
@@ -906,6 +930,13 @@ export const UI_HTML = `<!doctype html>
       // plenty — it catches process start/stop within one cadence boundary.
       setInterval(refreshSessions, 15_000);
       openWs();
+      // First-run heuristic: default nickname is 'agent' and bio is empty.
+      // Show onboarding so the user sets their identity before joining rooms.
+      if ((!me.nickname || me.nickname === 'agent') && !me.bio) {
+        $('onb-nickname').value = me.nickname || '';
+        $('onb-bio').value = '';
+        openDialog('onboarding-dialog');
+      }
       // If the user arrived via a /#join=... share link, open the join
       // dialog pre-filled with the ticket (stashed across the login step).
       const pending = sessionStorage.getItem(PENDING_JOIN_KEY);
@@ -1208,8 +1239,17 @@ export const UI_HTML = `<!doctype html>
       const nick = document.createElement('span'); nick.className = 'nick';
       const [badge, badgeTitle] = kindBadge(m.kind);
       nick.textContent = (badge ? badge + ' ' : '') + '@' + (m.nickname || m.pubkey.slice(0, 8));
-      if (badgeTitle) nick.title = badgeTitle + (m.client ? ' (' + m.client + ')' : '');
+      const titleParts = [];
+      if (badgeTitle) titleParts.push(badgeTitle + (m.client ? ' (' + m.client + ')' : ''));
+      if (m.bio) titleParts.push(m.bio);
+      if (titleParts.length) nick.title = titleParts.join('\n');
       row.appendChild(av); row.appendChild(nick);
+      if (m.bio) {
+        const bio = document.createElement('span');
+        bio.className = 'member-bio';
+        bio.textContent = m.bio;
+        row.appendChild(bio);
+      }
       if (canKick && !isMe) {
         const kb = document.createElement('button');
         kb.type = 'button'; kb.className = 'kick-btn'; kb.textContent = 'kick';
@@ -1409,6 +1449,23 @@ export const UI_HTML = `<!doctype html>
     openDialog('join-dialog');
     setTimeout(() => $('join-ticket').focus(), 0);
   });
+  $('onb-save').addEventListener('click', async () => {
+    const nick = $('onb-nickname').value.trim();
+    const bio = $('onb-bio').value.trim();
+    if (!nick) { toast('Please enter a display name', 'err'); return; }
+    try {
+      await api('/api/nickname', { method: 'POST', body: JSON.stringify({ nickname: nick }) });
+      if (bio) {
+        await api('/api/bio', { method: 'POST', body: JSON.stringify({ bio }) });
+      }
+      me = await api('/api/me');
+      renderMe();
+      $('onboarding-dialog').close();
+      toast('Profile saved — welcome, @' + nick + '!');
+    } catch (e) { toast('Save failed: ' + e.message, 'err'); }
+  });
+  $('onb-skip').addEventListener('click', () => $('onboarding-dialog').close());
+
   $('join-submit').addEventListener('click', async () => {
     const ticket = $('join-ticket').value.trim();
     if (!ticket) return;

@@ -8,6 +8,8 @@ export interface Member {
   client: string;
   /** Derived from `client`. 'unknown' means we have no basis to classify. */
   kind: 'agent' | 'human' | 'unknown';
+  /** Short self-declared bio — empty if unset. */
+  bio: string;
 }
 
 export interface Message {

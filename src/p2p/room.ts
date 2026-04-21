@@ -50,6 +50,8 @@ export interface MemberInfo {
    * a 🤖 badge in UIs; known human clients get 👤. See clientKind() for
    * the derivation. Empty string means we've never seen a hello yet. */
   client: string;
+  /** Short bio self-declared by the peer in their latest hello. */
+  bio: string;
 }
 
 /**
@@ -107,6 +109,7 @@ export const INBOUND_LIMITS = {
   /** Max members per single members-gossip envelope. */
   MEMBERS_GOSSIP: 10_000,
   NICKNAME_CHARS: 128,
+  BIO_CHARS: 200,
 };
 
 function validHello(inner: InnerHello): boolean {
@@ -117,6 +120,9 @@ function validHello(inner: InnerHello): boolean {
   if (typeof inner.version !== 'string' || inner.version.length > INBOUND_LIMITS.NICKNAME_CHARS)
     return false;
   if (!(inner.x25519_pub instanceof Uint8Array) || inner.x25519_pub.length !== 32) return false;
+  if (inner.bio !== undefined) {
+    if (typeof inner.bio !== 'string' || inner.bio.length > INBOUND_LIMITS.BIO_CHARS) return false;
+  }
   return true;
 }
 
@@ -368,7 +374,7 @@ export class Room extends EventEmitter {
 
   /** Seed our own roster entry. Called once — at room creation by the creator
    * or at ticket-join time by a joiner. */
-  initSelf(nickname: string, client = ''): void {
+  initSelf(nickname: string, client = '', bio = ''): void {
     const me: MemberInfo = {
       pubkey: this.identity.publicKey,
       nickname,
@@ -376,6 +382,7 @@ export class Room extends EventEmitter {
       x25519_pub: this.identity.x25519PublicKey,
       online: true,
       client,
+      bio,
     };
     this.members.set(base32Encode(me.pubkey), me);
     this.persistMember(me);
@@ -383,12 +390,13 @@ export class Room extends EventEmitter {
   }
 
   /** Sends a hello to all peers (join handshake). */
-  sendHello(nickname: string, client: string, version: string): void {
+  sendHello(nickname: string, client: string, version: string, bio = ''): void {
     const inner: InnerHello = {
       nickname,
       client,
       version,
       x25519_pub: this.identity.x25519PublicKey,
+      ...(bio ? { bio } : {}),
     };
     const env = sealEnvelope(
       'hello',
@@ -400,12 +408,13 @@ export class Room extends EventEmitter {
     );
     this.broadcast(env);
     if (!this.members.has(base32Encode(this.identity.publicKey))) {
-      this.initSelf(nickname);
+      this.initSelf(nickname, client, bio);
     } else {
-      // refresh nickname / x25519 in case they changed
+      // refresh self-declared fields in case they changed
       const me = this.members.get(base32Encode(this.identity.publicKey))!;
       me.nickname = nickname;
       me.x25519_pub = this.identity.x25519PublicKey;
+      me.bio = bio;
       this.persistMember(me);
     }
   }
@@ -583,6 +592,7 @@ export class Room extends EventEmitter {
           x25519_pub: inner.x25519_pub,
           online: true,
           client: inner.client,
+          bio: inner.bio || existing?.bio || '',
         };
         this.members.set(key, info);
         this.persistMember(info);
@@ -628,9 +638,10 @@ export class Room extends EventEmitter {
             joined_at: existing ? Math.min(existing.joined_at, m.joined_at) : m.joined_at,
             x25519_pub: m.x25519_pub,
             online: existing?.online ?? false,
-            // Gossip doesn't carry client — preserve whatever we already
+            // Gossip doesn't carry client/bio — preserve whatever we already
             // learned from that peer's hello.
             client: existing?.client ?? '',
+            bio: existing?.bio ?? '',
           };
           this.members.set(key, info);
           this.persistMember(info);
@@ -954,6 +965,7 @@ export class Room extends EventEmitter {
       x25519_pub: req.x25519_pub,
       online: true,
       client: req.client || '',
+      bio: '',
     };
     this.members.set(key, info);
     this.persistMember(info);
@@ -986,6 +998,7 @@ export class Room extends EventEmitter {
       online: m.online ? 1 : 0,
       x25519_pub: base32Encode(m.x25519_pub),
       client: m.client || '',
+      bio: m.bio || '',
     });
   }
 

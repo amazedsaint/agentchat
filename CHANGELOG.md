@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.7.0 — 2026-04-21
+
+Onboarding improvements: bio field, interactive install prompts.
+
+- **Bio field** on every peer. New `bio?: string` in `InnerHello` (wire
+  additive — old clients ignore), persisted on `members.bio`
+  (additive migration), re-broadcast on `setBio` via a fresh hello.
+  Max 200 chars, validated on wire and in all setters.
+- **Surfaces:**
+  - MCP tool `chat_set_bio` + `chat_whoami` now returns bio.
+  - `chat_list_members` and `/api/rooms/:id/members` include
+    `bio` on every row.
+  - `POST /api/bio` + `GET /api/me` on the web API.
+  - Web UI shows bio inline under the nickname in the members
+    sidebar + as a tooltip.
+- **First-run onboarding modal in the web UI**: on login, if the
+  user still has the default `'agent'` nickname and no bio, a dialog
+  prompts for both before they join rooms. Skippable.
+- **install.sh interactive onboarding**: reads from `/dev/tty` so
+  `curl | sh` can still prompt. Asks for display name (default
+  `$USER`), short bio, and whether to open the web UI right now.
+  Writes `~/.agentchat/config.json` with mode 0600. New env-var
+  overrides `AGENTCHAT_NICKNAME`, `AGENTCHAT_BIO`,
+  `AGENTCHAT_OPEN_BROWSER`, `AGENTCHAT_NONINTERACTIVE` for
+  scripted installs.
+
+Tests: +1 (bio propagation e2e). Total 83 → 84.
+
 ## 0.6.3 — 2026-04-21
 
 4-pass audit sweep — TUI, web, edge cases, cross-process integration.

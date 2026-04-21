@@ -14,6 +14,7 @@ export interface RoomManagerOptions {
   nickname: string;
   clientName: string;
   version: string;
+  bio?: string;
   swarm?: Swarm;
 }
 
@@ -24,6 +25,7 @@ export class RoomManager extends EventEmitter {
   readonly clientName: string;
   readonly version: string;
   private nickname: string;
+  private bio: string;
   readonly swarm: Swarm;
   private started = false;
 
@@ -35,6 +37,7 @@ export class RoomManager extends EventEmitter {
     this.nickname = opts.nickname;
     this.clientName = opts.clientName;
     this.version = opts.version;
+    this.bio = opts.bio || '';
     this.swarm = opts.swarm || new Swarm();
 
     this.swarm.on('envelope', (env: Envelope) => {
@@ -50,7 +53,7 @@ export class RoomManager extends EventEmitter {
     this.swarm.on('connection', () => {
       for (const room of this.rooms.values()) {
         try {
-          room.sendHello(this.nickname, this.clientName, this.version);
+          room.sendHello(this.nickname, this.clientName, this.version, this.bio);
         } catch {
           /* best-effort */
         }
@@ -66,6 +69,21 @@ export class RoomManager extends EventEmitter {
   getNickname(): string {
     return this.nickname;
   }
+  getBio(): string {
+    return this.bio;
+  }
+  setBio(bio: string): void {
+    this.bio = bio;
+    // Same rationale as setNickname — re-broadcast so peers learn the new bio
+    // without waiting for the next reconnect or message.
+    for (const room of this.rooms.values()) {
+      try {
+        room.sendHello(this.nickname, this.clientName, this.version, this.bio);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
   setNickname(nick: string): void {
     this.nickname = nick;
     // Re-broadcast hello to every active room so peers learn the new
@@ -73,7 +91,7 @@ export class RoomManager extends EventEmitter {
     // error because a swarm that's mid-teardown may refuse a write.
     for (const room of this.rooms.values()) {
       try {
-        room.sendHello(this.nickname, this.clientName, this.version);
+        room.sendHello(this.nickname, this.clientName, this.version, this.bio);
       } catch {
         /* ignore */
       }
@@ -147,6 +165,7 @@ export class RoomManager extends EventEmitter {
             x25519_pub: mem.x25519_pub ? base32Decode(mem.x25519_pub) : new Uint8Array(0),
             online: false,
             client: mem.client || '',
+            bio: mem.bio || '',
           });
         } catch {
           // skip malformed row
@@ -154,7 +173,7 @@ export class RoomManager extends EventEmitter {
       }
       this.attachRoom(room);
       await this.swarm.joinTopic(room.id);
-      room.sendHello(this.nickname, this.clientName, this.version);
+      room.sendHello(this.nickname, this.clientName, this.version, this.bio);
     } catch {
       // Individual room rehydration failures are isolated — one bad row
       // shouldn't block the rest of the rooms from coming up.
@@ -223,7 +242,7 @@ export class RoomManager extends EventEmitter {
       (env) => this.swarm.broadcast(env),
     );
     this.attachRoom(room);
-    room.initSelf(this.nickname);
+    room.initSelf(this.nickname, this.clientName, this.bio);
     // In approval mode, immediately rotate so the initial msg key is NOT
     // derivable from the ticket alone. Anyone joining must be approved to
     // receive the epoch-1+ key.
@@ -256,9 +275,9 @@ export class RoomManager extends EventEmitter {
       (env) => this.swarm.broadcast(env),
     );
     this.attachRoom(room);
-    room.initSelf(nickname);
+    room.initSelf(nickname, this.clientName, this.bio);
     await this.swarm.joinTopic(room.id);
-    room.sendHello(nickname, this.clientName, this.version);
+    room.sendHello(nickname, this.clientName, this.version, this.bio);
     return room;
   }
 
@@ -337,7 +356,7 @@ export class RoomManager extends EventEmitter {
     if (Buffer.compare(mine, a) === 0) room.initSelf(this.nickname);
     else room.initSelf(this.nickname);
     await this.swarm.joinTopic(room.id);
-    room.sendHello(this.nickname, this.clientName, this.version);
+    room.sendHello(this.nickname, this.clientName, this.version, this.bio);
     return room;
   }
 }

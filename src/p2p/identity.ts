@@ -14,8 +14,13 @@ export interface IdentityFile {
 
 export interface Config {
   nickname: string;
+  /** Short human-readable bio shown next to the nickname in room UIs. */
+  bio?: string;
   http?: { port?: number; host?: string };
 }
+
+/** Max chars for a bio — enforced on the wire and in every UI. */
+export const BIO_MAX = 200;
 
 export class Identity {
   readonly publicKey: Uint8Array;

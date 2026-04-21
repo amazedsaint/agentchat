@@ -38,6 +38,7 @@ function memberToWire(m: {
   joined_at: number;
   online: boolean;
   client?: string;
+  bio?: string;
 }): Member {
   const client = m.client || '';
   return {
@@ -47,6 +48,7 @@ function memberToWire(m: {
     joined_at: new Date(m.joined_at).toISOString(),
     client,
     kind: clientKind(client),
+    bio: m.bio || '',
   };
 }
 
@@ -77,14 +79,20 @@ function msgRowToWire(r: {
 const whoami: ToolDef<Record<string, never>> = {
   name: 'chat_whoami',
   description:
-    'Returns your own identity (public key + nickname) and the list of rooms you have currently joined. Use this first so other agents and humans can recognise you.',
+    'Returns your own identity (public key + nickname + bio) and the list of rooms you have currently joined. Use this first so other agents and humans can recognise you.',
   inputSchema: z.object({}).strict(),
   handler: async ({ manager }) => {
     const joined = [...manager.rooms.values()].map((r) => r.name);
     const pubkey = bytesToHex(manager.identity.publicKey);
-    const payload = { pubkey, nickname: manager.getNickname(), joined_rooms: joined };
+    const bio = manager.getBio();
+    const payload = {
+      pubkey,
+      nickname: manager.getNickname(),
+      bio,
+      joined_rooms: joined,
+    };
     return ok(
-      `You are ${manager.getNickname()} (${pubkey.slice(0, 12)}…). In rooms: ${joined.join(', ') || '(none)'}`,
+      `You are ${manager.getNickname()} (${pubkey.slice(0, 12)}…)${bio ? ` — ${bio}` : ''}. In rooms: ${joined.join(', ') || '(none)'}`,
       payload,
     );
   },
@@ -327,6 +335,17 @@ const setNickname: ToolDef<{ nickname: string }> = {
   handler: async ({ manager }, args) => {
     manager.setNickname(args.nickname);
     return ok(`Nickname set to ${args.nickname}.`, { ok: true });
+  },
+};
+
+const setBio: ToolDef<{ bio: string }> = {
+  name: 'chat_set_bio',
+  description:
+    "Set your short bio — a 1–2 sentence self-description visible to every member of rooms you join. Useful for saying 'I'm the deployment bot' or 'QA engineer'. Max 200 characters; pass an empty string to clear.",
+  inputSchema: z.object({ bio: z.string().max(200) }).strict(),
+  handler: async ({ manager }, args) => {
+    manager.setBio(args.bio);
+    return ok(args.bio ? `Bio set to: ${args.bio}` : 'Bio cleared.', { ok: true });
   },
 };
 
@@ -748,6 +767,7 @@ export const ALL_TOOLS: ToolDef<any>[] = [
   fetchHistory,
   tail,
   setNickname,
+  setBio,
   setTopic,
   createInvite,
   kick,

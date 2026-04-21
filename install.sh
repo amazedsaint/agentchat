@@ -10,6 +10,9 @@
 #   AGENTCHAT_BRANCH=main     branch/tag/commit to check out (default main)
 #   AGENTCHAT_SKIP_SKILL=1    don't install the Claude Code skill file
 #   AGENTCHAT_SKIP_MCP=1      don't register with Claude Code via `claude mcp add`
+#   AGENTCHAT_NICKNAME=alice  pre-seed display name (skips the prompt)
+#   AGENTCHAT_BIO="..."       pre-seed bio (skips the prompt)
+#   AGENTCHAT_OPEN_BROWSER=0  skip the "open the web UI" prompt (headless mode)
 
 set -eu
 
@@ -148,6 +151,68 @@ case ":$PATH:" in
   *) on_path=0 ;;
 esac
 
+# ---------- interactive onboarding ----------
+# Read prompts from /dev/tty so `curl ... | sh` (where stdin is the pipe) can
+# still ask the user questions. If /dev/tty isn't available (CI, no terminal)
+# we silently fall back to defaults — the user can run the setup later via the
+# web UI onboarding modal or `agentchat-mcp` + `/chat nick`, `/chat bio`.
+if [ -r /dev/tty ] && [ "${AGENTCHAT_NONINTERACTIVE:-0}" != "1" ]; then
+  CONFIG_DIR="$HOME/.agentchat"
+  CONFIG_FILE="$CONFIG_DIR/config.json"
+  mkdir -p "$CONFIG_DIR"
+
+  default_nick="${AGENTCHAT_NICKNAME:-${USER:-agent}}"
+  default_bio="${AGENTCHAT_BIO:-}"
+
+  printf '\n\033[1;36m==> Quick profile setup\033[0m\n'
+  printf 'Other room members will see this. You can change it anytime.\n\n'
+
+  if [ -n "${AGENTCHAT_NICKNAME:-}" ]; then
+    nickname="$AGENTCHAT_NICKNAME"
+    printf '  Display name : %s  (from AGENTCHAT_NICKNAME)\n' "$nickname"
+  else
+    printf '  Display name [%s]: ' "$default_nick"
+    read -r nickname < /dev/tty || nickname=""
+    [ -z "$nickname" ] && nickname="$default_nick"
+  fi
+
+  if [ -n "${AGENTCHAT_BIO:-}" ]; then
+    bio="$AGENTCHAT_BIO"
+    printf '  Bio          : %s  (from AGENTCHAT_BIO)\n' "$bio"
+  else
+    printf '  Short bio (optional, visible in rooms): '
+    read -r bio < /dev/tty || bio=""
+  fi
+
+  # Write minimal config.json. Strip " and \ from inputs — we're not invoking
+  # a JSON library from shell, just emitting a known-safe subset.
+  safe_nick=$(printf '%s' "$nickname" | tr -d '"\\')
+  safe_bio=$(printf '%s' "$bio" | tr -d '"\\')
+  if [ -n "$safe_bio" ]; then
+    printf '{\n  "nickname": "%s",\n  "bio": "%s"\n}\n' "$safe_nick" "$safe_bio" > "$CONFIG_FILE"
+  else
+    printf '{\n  "nickname": "%s"\n}\n' "$safe_nick" > "$CONFIG_FILE"
+  fi
+  chmod 600 "$CONFIG_FILE"
+  printf '  \033[32m✓\033[0m Saved to %s\n\n' "$CONFIG_FILE"
+
+  # Browser prompt
+  if [ "${AGENTCHAT_OPEN_BROWSER:-}" = "0" ]; then
+    open_browser=n
+  elif [ "${AGENTCHAT_OPEN_BROWSER:-}" = "1" ]; then
+    open_browser=y
+  else
+    printf '  Open the web UI in your browser now? [Y/n] '
+    read -r open_browser < /dev/tty || open_browser=""
+  fi
+  case "${open_browser:-y}" in
+    n|N|no|NO) OPEN_BROWSER_NOW=0 ;;
+    *)         OPEN_BROWSER_NOW=1 ;;
+  esac
+else
+  OPEN_BROWSER_NOW=0
+fi
+
 # ---------- post-install banner ----------
 printf '\n'
 printf '\033[1;32m  ✓ agentchat is installed.\033[0m\n'
@@ -194,4 +259,30 @@ if [ "$on_path" -eq 0 ]; then
   printf '  \033[1;33m⚠  %s is not on your PATH.\033[0m\n' "$BIN_DIR"
   printf '     Add this to your ~/.bashrc or ~/.zshrc:\n\n'
   printf '       export PATH="%s:$PATH"\n\n' "$BIN_DIR"
+fi
+
+# ---------- optionally launch the web UI ----------
+if [ "${OPEN_BROWSER_NOW:-0}" = "1" ]; then
+  if [ "$on_path" -eq 1 ] || [ -x "$BIN_DIR/agentchat" ]; then
+    printf '\033[1;36m==> Starting agentchat web…\033[0m\n'
+    # Background it so the install script can exit. The web server writes its
+    # URL to ~/.agentchat/web-url; the user can always rediscover it via
+    # `agentchat url`.
+    nohup "$BIN_DIR/agentchat" web >"$HOME/.agentchat/web.log" 2>&1 &
+    sleep 1
+    # Try to open the browser on the URL the server recorded.
+    url=""
+    [ -r "$HOME/.agentchat/web-url" ] && url=$(cat "$HOME/.agentchat/web-url" 2>/dev/null)
+    if [ -n "$url" ]; then
+      if command -v open >/dev/null 2>&1; then
+        open "$url" >/dev/null 2>&1 || true
+      elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$url" >/dev/null 2>&1 || true
+      else
+        printf '   Open this in your browser: %s\n' "$url"
+      fi
+    fi
+  else
+    printf '   (skipped — %s not on PATH, run \033[36magentchat web\033[0m yourself)\n' "$BIN_DIR"
+  fi
 fi

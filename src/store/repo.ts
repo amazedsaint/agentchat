@@ -41,6 +41,8 @@ export interface MemberRow {
   x25519_pub: string;
   /** Client string from the peer's latest hello (e.g. "claude-code", "tui"). */
   client: string;
+  /** Short self-declared bio from the peer's latest hello. */
+  bio: string;
 }
 
 export interface MessageRow {
@@ -127,13 +129,14 @@ export class Repo {
   upsertMember(m: MemberRow): void {
     this.db
       .prepare(
-        `INSERT INTO members (room_id, pubkey, nickname, joined_at, online, x25519_pub, client)
-         VALUES (@room_id, @pubkey, @nickname, @joined_at, @online, @x25519_pub, @client)
+        `INSERT INTO members (room_id, pubkey, nickname, joined_at, online, x25519_pub, client, bio)
+         VALUES (@room_id, @pubkey, @nickname, @joined_at, @online, @x25519_pub, @client, @bio)
          ON CONFLICT(room_id, pubkey) DO UPDATE SET
            nickname=excluded.nickname,
            online=excluded.online,
            x25519_pub=CASE WHEN excluded.x25519_pub != '' THEN excluded.x25519_pub ELSE members.x25519_pub END,
-           client=CASE WHEN excluded.client != '' THEN excluded.client ELSE members.client END`,
+           client=CASE WHEN excluded.client != '' THEN excluded.client ELSE members.client END,
+           bio=excluded.bio`,
       )
       .run(m);
   }

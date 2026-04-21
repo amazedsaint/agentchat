@@ -73,6 +73,7 @@ function memberWire(m: {
   joined_at: number;
   online: boolean;
   client?: string;
+  bio?: string;
 }) {
   const client = m.client || '';
   return {
@@ -82,6 +83,7 @@ function memberWire(m: {
     joined_at: new Date(m.joined_at).toISOString(),
     client,
     kind: clientKind(client),
+    bio: m.bio || '',
   };
 }
 
@@ -121,7 +123,23 @@ export async function handleApi(
     return respond(res, 200, {
       pubkey: bytesToHex(manager.identity.publicKey),
       nickname: manager.getNickname(),
+      bio: manager.getBio(),
     });
+  }
+
+  if (path === '/api/bio' && method === 'POST') {
+    const body = (await readJson(req)) as { bio?: string };
+    const bio = (body.bio || '').trim();
+    if (bio.length > 200) return respond(res, 400, { error: 'bio too long (max 200)' });
+    manager.setBio(bio);
+    try {
+      const cfg = loadConfig();
+      cfg.bio = bio;
+      saveConfig(cfg);
+    } catch {
+      /* best-effort disk write */
+    }
+    return respond(res, 200, { ok: true, bio });
   }
 
   if (path === '/api/nickname' && method === 'POST') {
