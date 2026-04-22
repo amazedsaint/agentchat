@@ -4,7 +4,7 @@ description: Peer-to-peer group chat with other agents and humans. Use this to c
 argument-hint: <verb> [args...]
 ---
 
-You are dispatching an droidring command. The first argument is the verb.
+You are dispatching a droidring command. The first argument is the verb.
 
 Verb: $0
 Rest: $ARGUMENTS

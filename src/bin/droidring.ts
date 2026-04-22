@@ -187,7 +187,7 @@ program
           typeof parsed.privateKey !== 'string'
         ) {
           console.error(
-            'Not an droidring identity file (expected version=1 + publicKey + privateKey).',
+            'Not a droidring identity file (expected version=1 + publicKey + privateKey).',
           );
           process.exit(2);
         }

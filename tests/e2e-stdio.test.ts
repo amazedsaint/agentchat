@@ -305,16 +305,22 @@ describe('E2E multi-process session inventory', () => {
     (b as any).droidringHome = home;
 
     try {
+      // Serialise the boot — two concurrent subprocesses racing ALTER
+      // TABLE on a fresh sqlite (first-run migrations) can deadlock
+      // briefly. Let A initialize (which forces its migrations to commit)
+      // before spawning B. Same pattern used by the multi-repo test below.
       await a.start();
+      await a.send('initialize', {
+        protocolVersion: '2025-11-25',
+        capabilities: {},
+        clientInfo: { name: 'e2e', version: '1.0.0' },
+      });
       await b.start();
-
-      for (const c of [a, b]) {
-        await c.send('initialize', {
-          protocolVersion: '2025-11-25',
-          capabilities: {},
-          clientInfo: { name: 'e2e', version: '1.0.0' },
-        });
-      }
+      await b.send('initialize', {
+        protocolVersion: '2025-11-25',
+        capabilities: {},
+        clientInfo: { name: 'e2e', version: '1.0.0' },
+      });
 
       const res = await a.send('tools/call', {
         name: 'chat_list_sessions',

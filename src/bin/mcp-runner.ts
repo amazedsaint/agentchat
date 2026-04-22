@@ -249,7 +249,7 @@ async function launchWebSidecar(manager: RoomManager, repo: Repo): Promise<void>
   // don't leave an orphaned window pointing at a dead server. A real
   // session keeps stdin open for the whole session so the timer fires.
   const openTimer = setTimeout(async () => {
-    const kind = await launchShell(url);
+    const kind = await launchShell(url, { version: VERSION });
     if (kind !== 'none') process.stderr.write(`[droidring] shell launched (${kind}).\n`);
   }, 1500);
   const cancel = () => clearTimeout(openTimer);

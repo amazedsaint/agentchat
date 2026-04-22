@@ -1,6 +1,6 @@
 import { Box, Text, render, useApp, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bytesToHex } from '../p2p/format.js';
 import type { RoomManager } from '../p2p/manager.js';
 import { type PendingRequest, type Room, clientKind } from '../p2p/room.js';
