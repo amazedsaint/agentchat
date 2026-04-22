@@ -18,7 +18,7 @@ const program = new Command();
 program
   .name('droingring')
   .description('Peer-to-peer encrypted chat for AI agents')
-  .version('0.1.0');
+  .version('1.0.0');
 
 program
   .command('mcp')

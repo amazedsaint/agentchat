@@ -308,22 +308,43 @@ fi
 if [ "${OPEN_BROWSER_NOW:-0}" = "1" ]; then
   if [ "$on_path" -eq 1 ] || [ -x "$BIN_DIR/droingring" ]; then
     printf '\033[1;36m==> Starting droingring web…\033[0m\n'
-    # Background it so the install script can exit. The web server writes its
-    # URL to ~/.droingring/web-url; the user can always rediscover it via
-    # `droingring url`.
-    nohup "$BIN_DIR/droingring" web >"$HOME/.droingring/web.log" 2>&1 &
-    sleep 1
-    # Try to open the browser on the URL the server recorded.
-    url=""
-    [ -r "$HOME/.droingring/web-url" ] && url=$(cat "$HOME/.droingring/web-url" 2>/dev/null)
-    if [ -n "$url" ]; then
-      if command -v open >/dev/null 2>&1; then
-        open "$url" >/dev/null 2>&1 || true
-      elif command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$url" >/dev/null 2>&1 || true
-      else
-        printf '   Open this in your browser: %s\n' "$url"
+    mkdir -p "$HOME/.droingring"
+    WEB_URL_FILE="$HOME/.droingring/web-url"
+    WEB_LOG="$HOME/.droingring/web.log"
+    # Clear any stale URL so we only open once the NEW server has written it.
+    rm -f "$WEB_URL_FILE"
+    # Background so the install script can exit. Server writes the URL to
+    # ~/.droingring/web-url once it's listening.
+    nohup "$BIN_DIR/droingring" web >"$WEB_LOG" 2>&1 &
+    SRV_PID=$!
+    # Poll up to ~10 s — first-run bootstrap (identity gen, sqlite migration,
+    # Hyperswarm DHT) can take several seconds. Earlier versions only slept
+    # 1 s and silently skipped the browser-open when the URL file wasn't there.
+    # Exit the poll early if the child dies (misconfigured port etc.).
+    printf '   (waiting for server to start…)\n'
+    i=0
+    while [ "$i" -lt 40 ]; do
+      [ -r "$WEB_URL_FILE" ] && break
+      kill -0 "$SRV_PID" 2>/dev/null || break
+      sleep 0.25
+      i=$((i + 1))
+    done
+    if [ -r "$WEB_URL_FILE" ]; then
+      url=$(cat "$WEB_URL_FILE" 2>/dev/null | head -1)
+      if [ -n "$url" ]; then
+        if command -v open >/dev/null 2>&1; then
+          open "$url" >/dev/null 2>&1 || printf '   %s\n' "$url"
+        elif command -v xdg-open >/dev/null 2>&1; then
+          xdg-open "$url" >/dev/null 2>&1 || printf '   %s\n' "$url"
+        else
+          printf '   Open in your browser: %s\n' "$url"
+        fi
       fi
+    else
+      printf '   \033[1;33m!\033[0m server did not write %s within 10 s\n' "$WEB_URL_FILE"
+      printf '     tail of log (%s):\n' "$WEB_LOG"
+      tail -n 10 "$WEB_LOG" 2>/dev/null | sed 's/^/       /'
+      printf '     Retry with \033[36mdroingring web\033[0m and check the banner it prints.\n'
     fi
   else
     printf '   (skipped — %s not on PATH, run \033[36mdroingring web\033[0m yourself)\n' "$BIN_DIR"
